@@ -109,49 +109,6 @@ def arb_cost(pulse, PSD, time_scale=1, shots=100, taus=None):
 
     return ffn_noisy_cost(pulse_rot, PSD, time_scale=time_scale, shots=shots, taus=taus)
 
-
-
-    # def ffn_noisy_cost_arb(pulse, PSD, time_scale=1, shots=100):
-    #     """
-    #     Computes the decay probability of a CPMG sequence individual based on the
-    #     filter function.
-    #
-    #     Uses both interpulse spacing and pulse rotation.
-    #
-    #     Parameters
-    #     ----------
-    #     pulse : list
-    #         list whose elements are two entry lists containting interpulse timing
-    #         and rotation. E.g [[2,a], [3,b]] corresponds to the sequence:
-    #         I-I-Rx(pi/a)-I-I-I-I-Rx(pi/a)-I-I + I-I-I-Rx(pi/b)-I-I-I-I-I-I-Rx(pi/b)-I-I-I
-    #
-    #     time_scale : float, optional
-    #         time corresponding to one step. Defaults to 1.
-    #
-    #     PSD : list
-    #         power spectral density of the signal
-    #
-    #
-    #     Returns
-    #     -------
-    #     tuple :
-    #         outcome from binomial distrubution with parameter p computed from
-    #         the filter function of the CPMG sequence.
-    #     """
-    #
-    #     pass
-    #
-    #     # unzipped_object = zip(*pulse)
-    #     # unzipped_list = list(unzipped_object)
-    #     #
-    #     # taus, pulse_rot  = unzipped_list
-    #     #
-    #     # if len(taus) != len(pulse_rot):
-    #     #     raise ValueError("Length of taus must equal length of rots")
-    #     #
-    #     # return 0
-    #     # return ffn_noisy_cost(pulse_rot, PSD, time_scale=time_scale, shots=shots, taus=taus)
-
 def cost_sig_noise(pulse, SIGNAL_PSD, NOISE_PSD, time_scale=1, shots=100):
     """
     Computes the difference in decay probability between noise and noise + singal
