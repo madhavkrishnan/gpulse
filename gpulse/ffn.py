@@ -47,9 +47,13 @@ def switching_function(pulse_rot, taus=None):
         phase_list[pos + 3 * tau ] = pulse_rot[idx]
 
     # generate switching function
-    switching_function = np.real(np.exp(1j * np.cumsum(phase_list)))
+    # print(phase_list)
+    # switching_function = np.real(np.exp(1j * np.cumsum(phase_list)))
+    f_yz = np.sin(np.cumsum(phase_list))
+    f_zz = np.cos(np.cumsum(phase_list))
 
-    return switching_function
+    # return switching_function
+    return f_yz, f_zz
 
 def filter_function(pulse_rot, time_scale=1, num_points=512,  taus=None):
     """
@@ -83,16 +87,20 @@ def filter_function(pulse_rot, time_scale=1, num_points=512,  taus=None):
     """
 
     # Generate switching function
-    SF = switching_function(pulse_rot, taus=taus)
+    # SF = switching_function(pulse_rot, taus=taus)
+    f_yz, f_zz = switching_function(pulse_rot, taus=taus)
 
     # Generate frequencies
     w = np.arange(0, 2*num_points) * 2 * np.pi / (2*num_points*time_scale)
 
     # Compute the fourier transform of the switching function
-    F = np.fft.fft(SF,n=2*num_points) * time_scale
+    # F = np.fft.fft(SF,n=2*num_points) * time_scale
+    F_yz = np.fft.fft(f_yz,n=2*num_points) * time_scale
+    F_zz = np.fft.fft(f_zz,n=2*num_points) * time_scale
 
     # Compute the filter function
-    FF = np.abs(F)**2
+    # FF = np.abs(F)**2
+    FF = np.abs(F_yz)**2 + np.abs(F_zz)**2
 
     # remove transients?
     FF = FF[:num_points]
