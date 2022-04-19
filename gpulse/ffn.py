@@ -24,6 +24,7 @@ def switching_function(pulse_rot, taus=None):
         [1, 1, -1, -1, -1, -1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, 1, 1, 1]
 
     """
+    #add an if statement
     if taus is None:
         taus = [5]*len(pulse_rot)
 
