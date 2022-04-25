@@ -24,9 +24,13 @@ def switching_function(pulse_rot, taus=None):
         [1, 1, -1, -1, -1, -1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, 1, 1, 1]
 
     """
-    # Add taus
+    #add an if statement
     if taus is None:
         taus = [5]*len(pulse_rot)
+    
+    # for i in taus:
+    #     print(i)
+    # print('hello')
 
     # Convert pulse_rot list to angles
     pulse_rot = [2*np.pi / ele for ele in pulse_rot]
@@ -177,3 +181,6 @@ def decay_probability(pulse_rot, PSD, time_scale=1, taus=None,zipped=False):
 
     p0 = 0.5 * (1 + np.exp(-chi(pulse_rot, PSD, time_scale=time_scale, taus=taus)) )
     return p0
+
+
+# switching_function([1,1,1,1,1,1])
