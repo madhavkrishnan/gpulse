@@ -1,6 +1,7 @@
 # This file contains code to compute the filter function for
 # a pulse sequence defined using rotation angles.
 
+from cmath import phase
 import numpy as np
 
 def switching_function(pulse_rot, taus=None):
@@ -36,20 +37,36 @@ def switching_function(pulse_rot, taus=None):
     pulse_rot = [2*np.pi / ele for ele in pulse_rot]
 
     # Compute length of phase_list
-    length = 4 * sum(taus)
+    length = sum(taus) + len(taus)
+
+    #original length
+    #length = 4 * sum(taus)
 
     # initialise phase list
     phase_list = [0]*length
 
     # add pulse rotations
     for idx, tau in enumerate(taus):
+        # d1 r1 d1*2 r1    d2 r2 d2*2 r2 ...u
+        # to d1 r1    d2 r2
+        pos = sum(taus[:idx]) + idx
 
-        # current position in the sequence
-        pos =  4 * sum(taus[:idx])
-
-        # add rx rotations
         phase_list[pos + tau] = pulse_rot[idx]
-        phase_list[pos + 3 * tau ] = pulse_rot[idx]
+
+        # print('tau')
+        # print(tau)
+        # print('phase_list')
+        # num_phase_pos = pos + tau + 1
+        # print(phase_list[pos:num_phase_pos])
+
+    #print(phase_list)  
+    
+    # current position in the sequence
+        # pos =  4 * sum(taus[:idx])
+
+        # # add rx rotations
+        # phase_list[pos + tau] = pulse_rot[idx]
+        # phase_list[pos + 3 * tau ] = pulse_rot[idx]
 
     # generate switching function
     # print(phase_list)
