@@ -1,10 +1,11 @@
 # This file contains code to compute the filter function for
 # a pulse sequence defined using rotation angles.
 
+import random
 from cmath import phase
 import numpy as np
 
-def switching_function(pulse_rot, taus=None):
+def switching_function(pulse_rot, taus=None, type='CPMG'):
     """
     Function to generate the switching function list of given interpulse spacings
 
@@ -36,22 +37,37 @@ def switching_function(pulse_rot, taus=None):
     # Convert pulse_rot list to angles
     pulse_rot = [2*np.pi / ele for ele in pulse_rot]
 
-    # Compute length of phase_list
-    length = sum(taus) + len(taus)
+    if(type == 'RAND'):
+        #original length
+        length = 4 * sum(taus)
 
-    #original length
-    #length = 4 * sum(taus)
+        # initialise phase list
+        phase_list = [0]*length
 
-    # initialise phase list
-    phase_list = [0]*length
+        for idx, tau in enumerate(taus):
+            #current position in the sequence
+            pos =  4 * sum(taus[:idx])
 
-    # add pulse rotations
-    for idx, tau in enumerate(taus):
-        # d1 r1 d1*2 r1    d2 r2 d2*2 r2 ...u
-        # to d1 r1    d2 r2
-        pos = sum(taus[:idx]) + idx
+            rot_int = (random.randrange(0, 4*tau))
 
-        phase_list[pos + tau] = pulse_rot[idx]
+            # # add rx rotations
+            #phase_list[pos + tau] = pulse_rot[idx]
+            phase_list[pos + rot_int] = pulse_rot[idx]
+
+    if(type == 'GEN'):
+        # Compute length of phase_list
+        length = sum(taus) + len(taus)
+
+        # initialise phase list
+        phase_list = [0]*length
+
+        # add pulse rotations
+        for idx, tau in enumerate(taus):
+            # d1 r1 d1*2 r1    d2 r2 d2*2 r2 ...u
+            # to d1 r1    d2 r2
+            if(idx != len(taus)-1):
+                pos = sum(taus[:idx]) + idx
+                phase_list[pos + tau] = pulse_rot[idx]
 
         # print('tau')
         # print(tau)
@@ -59,14 +75,25 @@ def switching_function(pulse_rot, taus=None):
         # num_phase_pos = pos + tau + 1
         # print(phase_list[pos:num_phase_pos])
 
-    #print(phase_list)  
-    
-    # current position in the sequence
-        # pos =  4 * sum(taus[:idx])
+        #print(phase_list)
 
-        # # add rx rotations
-        # phase_list[pos + tau] = pulse_rot[idx]
-        # phase_list[pos + 3 * tau ] = pulse_rot[idx]
+    elif(type == 'CPMG'):
+    
+        #original length
+        length = 4 * sum(taus)
+
+        # initialise phase list
+        phase_list = [0]*length
+
+        for idx, tau in enumerate(taus):
+            #current position in the sequence
+            pos =  4 * sum(taus[:idx])
+
+            # # add rx rotations
+            phase_list[pos + tau] = pulse_rot[idx]
+            phase_list[pos + 3 * tau ] = pulse_rot[idx]
+        
+        #print(phase_list)
 
     # generate switching function
     # print(phase_list)
@@ -77,7 +104,7 @@ def switching_function(pulse_rot, taus=None):
     # return switching_function
     return f_yz, f_zz
 
-def filter_function(pulse_rot, time_scale=1, num_points=512,  taus=None):
+def filter_function(pulse_rot, time_scale=1, num_points=512,  taus=None, type='CPMG'):
     """
     Generate the filter function given a list of interpulse times
 
@@ -110,7 +137,7 @@ def filter_function(pulse_rot, time_scale=1, num_points=512,  taus=None):
 
     # Generate switching function
     # SF = switching_function(pulse_rot, taus=taus)
-    f_yz, f_zz = switching_function(pulse_rot, taus=taus)
+    f_yz, f_zz = switching_function(pulse_rot, taus=taus, type=type)
 
     # Generate frequencies
     w = np.arange(0, 2*num_points) * 2 * np.pi / (2*num_points*time_scale)
@@ -130,7 +157,7 @@ def filter_function(pulse_rot, time_scale=1, num_points=512,  taus=None):
 
     return w, FF
 
-def chi(pulse_rot, PSD, time_scale=1, taus=None):
+def chi(pulse_rot, PSD, time_scale=1, taus=None, type='CPMG'):
     """
     Computes the decay constant given the inter-pulse spacing and power spectral density
 
@@ -156,12 +183,12 @@ def chi(pulse_rot, PSD, time_scale=1, taus=None):
     """
 
 
-    w, FF = filter_function(pulse_rot, time_scale=time_scale, taus=taus)
+    w, FF = filter_function(pulse_rot, time_scale=time_scale, taus=taus, type=type)
 
     chi = np.trapz(FF * PSD / time_scale, w) / (2 * np.pi )
     return chi
 
-def decay_probability(pulse_rot, PSD, time_scale=1, taus=None,zipped=False):
+def decay_probability(pulse_rot, PSD, time_scale=1, taus=None, zipped=False, type='CPMG'):
     """
     Computes the probability of measuring zero on average after applying the CPMG pulse
 
@@ -196,7 +223,7 @@ def decay_probability(pulse_rot, PSD, time_scale=1, taus=None,zipped=False):
         taus = list(taus)
         pulse_rot = list(pulse_rot)
 
-    p0 = 0.5 * (1 + np.exp(-chi(pulse_rot, PSD, time_scale=time_scale, taus=taus)) )
+    p0 = 0.5 * (1 + np.exp(-chi(pulse_rot, PSD, time_scale=time_scale, taus=taus, type=type)) )
     return p0
 
 

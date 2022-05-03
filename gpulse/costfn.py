@@ -8,7 +8,7 @@ def new_fun():
     return 0
 
 
-def ffn_cost(pulse_rot, PSD, time_scale=1, taus=None):
+def ffn_cost(pulse_rot, PSD, time_scale=1, taus=None, type='CPMG'):
     """
     Computes the decay probability of a CPMG sequence individual based on the
     filter function
@@ -35,11 +35,11 @@ def ffn_cost(pulse_rot, PSD, time_scale=1, taus=None):
         probability of meausuring zero after the pulse sequence.
 
     """
-    p0 = decay_probability(pulse_rot, PSD, time_scale=time_scale, taus=taus)
+    p0 = decay_probability(pulse_rot, PSD, time_scale=time_scale, taus=taus, type=type)
 
     return (p0,)
 
-def ffn_noisy_cost(pulse_rot, PSD, time_scale=1, shots=100, taus=None):
+def ffn_noisy_cost(pulse_rot, PSD, time_scale=1, shots=100, taus=None, type='CPMG'):
     """
     Computes the decay probability of a CPMG sequence individual based on the
     filter function
@@ -67,11 +67,11 @@ def ffn_noisy_cost(pulse_rot, PSD, time_scale=1, shots=100, taus=None):
         the filter function of the CPMG sequence.
     """
 
-    p = ffn_cost(pulse_rot, PSD, time_scale=time_scale, taus=taus)
+    p = ffn_cost(pulse_rot, PSD, time_scale=time_scale, taus=taus, type=type)
 
     return (float(binomial(shots, p)) / shots,)
 
-def arb_cost(pulse, PSD, time_scale=1, shots=100, taus=None):
+def arb_cost(pulse, PSD, time_scale=1, shots=100, taus=None, type='CPMG'):
     """
     Computes the decay probability of a CPMG sequence individual based on the
     filter function
@@ -107,9 +107,9 @@ def arb_cost(pulse, PSD, time_scale=1, shots=100, taus=None):
     if len(taus) != len(pulse_rot):
         raise ValueError("Length of taus must equal length of rots")
 
-    return ffn_noisy_cost(pulse_rot, PSD, time_scale=time_scale, shots=shots, taus=taus)
+    return ffn_noisy_cost(pulse_rot, PSD, time_scale=time_scale, shots=shots, taus=taus, type=type)
 
-def cost_sig_noise(pulse, SIGNAL_PSD, NOISE_PSD, time_scale=1, shots=100):
+def cost_sig_noise(pulse, SIGNAL_PSD, NOISE_PSD, time_scale=1, shots=100, type='CPMG'):
     """
     Computes the difference in decay probability between noise and noise + singal
     of a CPMG sequence individual based on the filter function. I.e returns
@@ -149,8 +149,8 @@ def cost_sig_noise(pulse, SIGNAL_PSD, NOISE_PSD, time_scale=1, shots=100):
     if len(taus) != len(pulse_rot):
         raise ValueError("Length of taus must equal length of rots")
 
-    chi_sig = chi(pulse_rot, SIGNAL_PSD, time_scale=time_scale, taus=taus)
-    chi_noise = chi(pulse_rot, NOISE_PSD, time_scale=time_scale, taus=taus)
+    chi_sig = chi(pulse_rot, SIGNAL_PSD, time_scale=time_scale, taus=taus, type=type)
+    chi_noise = chi(pulse_rot, NOISE_PSD, time_scale=time_scale, taus=taus, type=type)
 
     return 0.5 * np.exp(-chi_noise) * (1 - np.exp(-chi_sig)),
 
