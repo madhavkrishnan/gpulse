@@ -2,6 +2,9 @@
 from gpulse.ffn import decay_probability, chi
 import numpy as np
 from numpy.random import binomial
+from gpulse.CPMG import CPMGCircuit
+import qiskit as qk
+from qiskit.providers.ibmq.managed import IBMQJobManager
 
 
 def new_fun():
@@ -233,3 +236,90 @@ def cost_sig_noise_coherent_error(pulse, SIGNAL_PSD, NOISE_PSD, time_scale=1, sh
     chi_noise = chi(pulse_rot_err, NOISE_PSD, time_scale=time_scale, taus=taus, ansatz = ansatz)
 
     return 0.5 * np.exp(-chi_noise) * (1 - np.exp(-chi_sig)),
+
+
+
+def cost_sig_noise_qasm(pop, SIGNAL_CLASS, NOISE_CLASS, backend, time_scale=1, shots=100, num_sig_trajs=1, num_noise_trajs=1):
+    # Constructs two circuits for each pulse sequence
+    #   a) Circuit 1 is a signal-less circuit
+    #   b) Circuit 2 contains the signal
+    circuit_dict = {}
+    for idx, pulse_sequence in enumerate(pop):
+        # Parse interpulse delays and pulse angles
+        unzipped_object = zip(*pulse_sequence)
+        unzipped_list = list(unzipped_object)
+        taus, pulse_rot  = unzipped_list
+        
+        # Construct parameterized circuit
+        cpmg_obj = CPMGCircuit(taus, pulse_rot)
+        cpmg_circ = cpmg_obj.get_circuit()
+        
+        # grab parameters
+        phis = cpmg_obj.phi_params
+        
+        # Construct signal-less circuit
+        if num_noise_trajs == 0:
+            phi_vals = np.zeros(len(phis))
+            phi_dict = {phis[i]:phi_vals[i] for i in range(len(phis))}
+            bound_cpmg = cpmg_circ.bind_parameters(phi_dict)
+            circuit_dict['no-sig%d' % idx] = bound_cpmg
+        else:
+            for traj_idx in range(num_noise_trajs):
+                noise_traj_list = [NC.generate_noise(len(phis)) for NC in NOISE_CLASS]
+                traj = np.sum(noise_traj_list, axis=0)
+                phi_dict = {phis[i]:traj[i] for i in range(len(phis))}
+                bound_cpmg = cpmg_circ.bind_parameters(phi_dict)
+                circuit_dict['no-sig%d_traj%d' % (idx, traj_idx)] = bound_cpmg
+        
+        # Construct signal circuit
+        for traj_idx in range(num_sig_trajs):
+            sig_traj = SIGNAL_CLASS.generate_noise(len(phis))
+            noise_traj_list = [NC.generate_noise(len(phis)) for NC in NOISE_CLASS]
+            noise_traj = np.sum(noise_traj_list, axis=0)
+            traj = sig_traj + noise_traj
+            phi_dict = {phis[i]:traj[i] for i in range(len(phis))}
+            bound_cpmg = cpmg_circ.bind_parameters(phi_dict)
+            circuit_dict['sig%d_traj%d' % (idx, traj_idx)] = bound_cpmg
+        
+    # Run circuits
+    if backend.name() == 'qasm_simulator':
+        job = qk.execute(list(circuit_dict.values()), backend=backend, shots=shots, optimization_level=0)
+        results = job.result()
+    else:
+        job_manager = IBMQJobManager()
+        job_set = job_manager.run(list(circuit_dict.values()), backend=backend, name='var-sig-detect', shots=shots,
+                                 optimization_level=0)
+        results = job_set.results() 
+    
+    # Compile fitness
+    no_sig_prob = []
+    if num_noise_trajs == 0:
+        for elem in range(len(pop)):
+            circ = circuit_dict['no-sig%d' % elem]
+            counts = results.get_counts(circ)
+            zero_counts = counts.get('0',0)
+            no_sig_prob.append(zero_counts/shots)
+    else:
+        for elem in range(len(pop)):
+            traj_sum = 0
+            for traj_idx in range(num_noise_trajs):
+                circ = circuit_dict['no-sig%d_traj%d' % (elem, traj_idx)]
+                counts = results.get_counts(circ)
+                zero_counts = counts.get('0',0)
+                traj_sum += zero_counts
+            no_sig_prob.append(traj_sum/shots/num_sig_trajs)
+    no_sig_prob = np.array(no_sig_prob)
+    
+    sig_prob = []
+    for elem in range(len(pop)):
+        traj_sum = 0
+        for traj_idx in range(num_sig_trajs):
+            circ = circuit_dict['sig%d_traj%d' % (elem, traj_idx)]
+            counts = results.get_counts(circ)
+            zero_counts = counts.get('0',0)
+            traj_sum += zero_counts
+        sig_prob.append(traj_sum/shots/num_sig_trajs)
+    sig_prob = np.array(sig_prob)
+    
+    fitness = no_sig_prob - sig_prob
+    return fitness
