@@ -8,7 +8,7 @@ def new_fun():
     return 0
 
 
-def ffn_cost(pulse_rot, PSD, time_scale=1, taus=None):
+def ffn_cost(pulse_rot, PSD, time_scale=1, taus=None, ansatz = "CPMG"):
     """
     Computes the decay probability of a CPMG sequence individual based on the
     filter function
@@ -27,7 +27,13 @@ def ffn_cost(pulse_rot, PSD, time_scale=1, taus=None):
 
     taus : list, opt
     a list of tau spacings for eg [2, 3] corresponds to the sequence:
-    I-I-Rx-I-I-I-I-Rx-I-I + I-I-I-Rx-I-I-I-I-I-I-Rx-I-I-I
+
+    ansatz : str, opt
+        Expects either "CPMG" which is default or None. If CPMG for eg. tau
+        spacings  [2, 3] corresponds to the sequence:
+        I-I-Rx-I-I-I-I-Rx-I-I + I-I-I-Rx-I-I-I-I-I-I-Rx-I-I-I
+        For anything else,
+        I-I-Rx-I-I-I-Rx
 
     Returns
     -------
@@ -35,11 +41,11 @@ def ffn_cost(pulse_rot, PSD, time_scale=1, taus=None):
         probability of meausuring zero after the pulse sequence.
 
     """
-    p0 = decay_probability(pulse_rot, PSD, time_scale=time_scale, taus=taus)
+    p0 = decay_probability(pulse_rot, PSD, time_scale=time_scale, taus=taus, ansatz = ansatz)
 
     return (p0,)
 
-def ffn_noisy_cost(pulse_rot, PSD, time_scale=1, shots=100, taus=None):
+def ffn_noisy_cost(pulse_rot, PSD, time_scale=1, shots=100, taus=None, ansatz = "CPMG"):
     """
     Computes the decay probability of a CPMG sequence individual based on the
     filter function
@@ -58,7 +64,13 @@ def ffn_noisy_cost(pulse_rot, PSD, time_scale=1, shots=100, taus=None):
 
     taus : list, opt
     a list of tau spacings for eg [2, 3] corresponds to the sequence:
-    I-I-Rx-I-I-I-I-Rx-I-I + I-I-I-Rx-I-I-I-I-I-I-Rx-I-I-I
+
+    ansatz : str, opt
+        Expects either "CPMG" which is default or None. If CPMG for eg. tau
+        spacings  [2, 3] corresponds to the sequence:
+        I-I-Rx-I-I-I-I-Rx-I-I + I-I-I-Rx-I-I-I-I-I-I-Rx-I-I-I
+        For anything else,
+        I-I-Rx-I-I-I-Rx
 
     Returns
     -------
@@ -67,7 +79,7 @@ def ffn_noisy_cost(pulse_rot, PSD, time_scale=1, shots=100, taus=None):
         the filter function of the CPMG sequence.
     """
 
-    p = ffn_cost(pulse_rot, PSD, time_scale=time_scale, taus=taus)
+    p = ffn_cost(pulse_rot, PSD, time_scale=time_scale, taus=taus, ansatz = ansatz)
 
     return (float(binomial(shots, p)) / shots,)
 
@@ -90,7 +102,13 @@ def arb_cost(pulse, PSD, time_scale=1, shots=100, taus=None):
 
     taus : list, opt
     a list of tau spacings for eg [2, 3] corresponds to the sequence:
-    I-I-Rx-I-I-I-I-Rx-I-I + I-I-I-Rx-I-I-I-I-I-I-Rx-I-I-I
+
+    ansatz : str, opt
+        Expects either "CPMG" which is default or None. If CPMG for eg. tau
+        spacings  [2, 3] corresponds to the sequence:
+        I-I-Rx-I-I-I-I-Rx-I-I + I-I-I-Rx-I-I-I-I-I-I-Rx-I-I-I
+        For anything else,
+        I-I-Rx-I-I-I-Rx
 
     Returns
     -------
@@ -109,7 +127,7 @@ def arb_cost(pulse, PSD, time_scale=1, shots=100, taus=None):
 
     return ffn_noisy_cost(pulse_rot, PSD, time_scale=time_scale, shots=shots, taus=taus)
 
-def cost_sig_noise(pulse, SIGNAL_PSD, NOISE_PSD, time_scale=1, shots=100):
+def cost_sig_noise(pulse, SIGNAL_PSD, NOISE_PSD, time_scale=1, shots=100, ansatz="CPMG"):
     """
     Computes the difference in decay probability between noise and noise + singal
     of a CPMG sequence individual based on the filter function. I.e returns
@@ -133,7 +151,13 @@ def cost_sig_noise(pulse, SIGNAL_PSD, NOISE_PSD, time_scale=1, shots=100):
 
     taus : list, opt
     a list of tau spacings for eg [2, 3] corresponds to the sequence:
-    I-I-Rx-I-I-I-I-Rx-I-I + I-I-I-Rx-I-I-I-I-I-I-Rx-I-I-I
+
+    ansatz : str, opt
+        Expects either "CPMG" which is default or None. If CPMG for eg. tau
+        spacings  [2, 3] corresponds to the sequence:
+        I-I-Rx-I-I-I-I-Rx-I-I + I-I-I-Rx-I-I-I-I-I-I-Rx-I-I-I
+        For anything else,
+        I-I-Rx-I-I-I-Rx
 
     Returns
     -------
@@ -149,14 +173,14 @@ def cost_sig_noise(pulse, SIGNAL_PSD, NOISE_PSD, time_scale=1, shots=100):
     if len(taus) != len(pulse_rot):
         raise ValueError("Length of taus must equal length of rots")
 
-    chi_sig = chi(pulse_rot, SIGNAL_PSD, time_scale=time_scale, taus=taus)
-    chi_noise = chi(pulse_rot, NOISE_PSD, time_scale=time_scale, taus=taus)
+    chi_sig = chi(pulse_rot, SIGNAL_PSD, time_scale=time_scale, taus=taus, ansatz=ansatz)
+    chi_noise = chi(pulse_rot, NOISE_PSD, time_scale=time_scale, taus=taus, ansatz=ansatz)
 
     return 0.5 * np.exp(-chi_noise) * (1 - np.exp(-chi_sig)),
 
 
 
-def cost_sig_noise_coherent_error(pulse, SIGNAL_PSD, NOISE_PSD, time_scale=1, shots=100, error=0):
+def cost_sig_noise_coherent_error(pulse, SIGNAL_PSD, NOISE_PSD, time_scale=1, shots=100, error=0, ansatz="CPMG"):
     """
     Computes the difference in decay probability between noise and noise + singal
     of a CPMG sequence individual based on the filter function. I.e returns
@@ -180,7 +204,13 @@ def cost_sig_noise_coherent_error(pulse, SIGNAL_PSD, NOISE_PSD, time_scale=1, sh
 
     taus : list, opt
     a list of tau spacings for eg [2, 3] corresponds to the sequence:
-    I-I-Rx-I-I-I-I-Rx-I-I + I-I-I-Rx-I-I-I-I-I-I-Rx-I-I-I
+
+    ansatz : str, opt
+        Expects either "CPMG" which is default or None. If CPMG for eg. tau
+        spacings  [2, 3] corresponds to the sequence:
+        I-I-Rx-I-I-I-I-Rx-I-I + I-I-I-Rx-I-I-I-I-I-I-Rx-I-I-I
+        For anything else,
+        I-I-Rx-I-I-I-Rx
 
     Returns
     -------
@@ -199,7 +229,7 @@ def cost_sig_noise_coherent_error(pulse, SIGNAL_PSD, NOISE_PSD, time_scale=1, sh
     if len(taus) != len(pulse_rot):
         raise ValueError("Length of taus must equal length of rots")
 
-    chi_sig = chi(pulse_rot_err, SIGNAL_PSD, time_scale=time_scale, taus=taus)
-    chi_noise = chi(pulse_rot_err, NOISE_PSD, time_scale=time_scale, taus=taus)
+    chi_sig = chi(pulse_rot_err, SIGNAL_PSD, time_scale=time_scale, taus=taus, ansatz = anstaz)
+    chi_noise = chi(pulse_rot_err, NOISE_PSD, time_scale=time_scale, taus=taus, ansatz = ansatz)
 
     return 0.5 * np.exp(-chi_noise) * (1 - np.exp(-chi_sig)),
