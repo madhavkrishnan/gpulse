@@ -49,27 +49,43 @@ class Noise:
 
     """
 
-    def __init__(self, power, length, cutoff, w0, worN=512):
+    def __init__(self, power, length, cutoff, peaks, weights=[1], worN=512):
         """
         Parameters
         ----------
-        power : float
+        power   : float
             decides the power of the signal - this is equal to the area under the
             curve of s(w).
-        length : int
+        length  : int
             length of the initial filter
-        cutoff : float
+        cutoff  : float
             cutoff frequency of the initial filter
-        w0 : float
-            central frequency of the signal
+        peaks   : float or list
+            Frequency peaks of the signal
+        weights : list, opt
+            ratio of peaks weights signal will be generated for each peak and combined
+            as sum weights[i]signal_i. Default value is for single unweighted peak.
+        worN    : int, opt
+            Number of points generated in the frequency domain.
+
+
         """
 
         self.power = power
         self.length = length
         self.cutoff = cutoff
-        self.w0 = w0
         self.worN = worN
-        self.coefficients = firwin(length, cutoff) * np.cos( np.pi * w0 * np.arange(length))
+
+        # Convert w0 into list if it is not
+
+        self.peaks = [peaks] if not isinstance(peaks, list) else peaks
+
+        # Generate multi peak filter
+        coeff = 0
+        for p, w in zip(self.peaks, weights):
+            coeff += w * firwin(length, cutoff) * np.cos( np.pi * p * np.arange(length))
+        self.coefficients = coeff
+
         # normalises numerator so that sum(abs(h)**2)*w[1] = power
         self.coefficients = self.coefficients / norm(self.coefficients) * np.sqrt(power)
         # compute frequency response of the filter. denominator coeffcients are
@@ -95,16 +111,15 @@ class Noise:
 
         # returns a copy of the signal
         return np.copy(self.noise)
-    
+
 
 class FAlphaNoise:
 
     """
     Class to generate 1/f^alpha noise
     """
-    
-    def __init__(self, power, alpha, gate_time=1):
-        N = 2048
+
+    def __init__(self, power, alpha, gate_time=1, N = 2048):
         wl = .001*np.pi
         wh = 0.5*np.pi
         Nf = np.ceil(2.5*(np.log10(wh)-np.log10(wl)))
@@ -128,8 +143,8 @@ class FAlphaNoise:
         self.w, self.h = freqz(self.coefficients, self.denom_coefficients, worN=N)
         self.upsample_length = None
         self.noise = None
-    
-    
+
+
     def generate_noise(self, upsample_length):
         """
         Generates the upsampled noise signal
@@ -147,7 +162,7 @@ class FAlphaNoise:
 
         # returns a copy of the signal
         return np.copy(self.noise)
-        
+
 
 class CPMGCircuit:
     """
@@ -196,7 +211,7 @@ class CPMGCircuit:
             self.pulse_rotation = [2*np.pi/theta for theta in pulse_rotation]
 #         # initialise circuit library
 #         # self.circuit_lib = {}
-        
+
 #         # Define signal/noise
 #         if signal == None:
 #             self.signal = np.zero(len(self.taus))
@@ -303,12 +318,12 @@ class CPMGCircuit:
 
         self.circuit = circuit.copy()
         return circuit
-    
-    
-    
+
+
+
 class RxRyCircuit(CPMGCircuit):
-    
-    
+
+
     def build_circuit(self, taus, pulse_rotation):
         """
         Function to build RxRy circuit.
@@ -316,8 +331,8 @@ class RxRyCircuit(CPMGCircuit):
         Parameters
         ----------
         taus : array_like
-            sequence of tau values defining the interpulse timing 
-            
+            sequence of tau values defining the interpulse timing
+
         pulse_rotations : array_like
             sequence of angle values defining the rotation angle for
             the control pulse

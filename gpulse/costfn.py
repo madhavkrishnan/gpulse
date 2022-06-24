@@ -249,14 +249,18 @@ def cost_sig_noise_qasm(pop, SIGNAL_CLASS, NOISE_CLASS, backend, time_scale=1, s
         unzipped_object = zip(*pulse_sequence)
         unzipped_list = list(unzipped_object)
         taus, pulse_rot  = unzipped_list
-        
+
         # Construct parameterized circuit
         cpmg_obj = CPMGCircuit(taus, pulse_rot)
         cpmg_circ = cpmg_obj.get_circuit()
-        
+
         # grab parameters
         phis = cpmg_obj.phi_params
-        
+
+        # Make NOISE_CLASS a list if it is not already
+        if not isinstance(NOISE_CLASS, list):
+            NOISE_CLASS = [NOISE_CLASS]
+
         # Construct signal-less circuit
         if num_noise_trajs == 0:
             phi_vals = np.zeros(len(phis))
@@ -270,17 +274,18 @@ def cost_sig_noise_qasm(pop, SIGNAL_CLASS, NOISE_CLASS, backend, time_scale=1, s
                 phi_dict = {phis[i]:traj[i] for i in range(len(phis))}
                 bound_cpmg = cpmg_circ.bind_parameters(phi_dict)
                 circuit_dict['no-sig%d_traj%d' % (idx, traj_idx)] = bound_cpmg
-        
+
         # Construct signal circuit
         for traj_idx in range(num_sig_trajs):
             sig_traj = SIGNAL_CLASS.generate_noise(len(phis))
+
             noise_traj_list = [NC.generate_noise(len(phis)) for NC in NOISE_CLASS]
             noise_traj = np.sum(noise_traj_list, axis=0)
             traj = sig_traj + noise_traj
             phi_dict = {phis[i]:traj[i] for i in range(len(phis))}
             bound_cpmg = cpmg_circ.bind_parameters(phi_dict)
             circuit_dict['sig%d_traj%d' % (idx, traj_idx)] = bound_cpmg
-        
+
     # Run circuits
     if backend.name() == 'qasm_simulator':
         job = qk.execute(list(circuit_dict.values()), backend=backend, shots=shots, optimization_level=0)
@@ -289,8 +294,8 @@ def cost_sig_noise_qasm(pop, SIGNAL_CLASS, NOISE_CLASS, backend, time_scale=1, s
         job_manager = IBMQJobManager()
         job_set = job_manager.run(list(circuit_dict.values()), backend=backend, name='var-sig-detect', shots=shots,
                                  optimization_level=0)
-        results = job_set.results() 
-    
+        results = job_set.results()
+
     # Compile fitness
     no_sig_prob = []
     if num_noise_trajs == 0:
@@ -309,7 +314,7 @@ def cost_sig_noise_qasm(pop, SIGNAL_CLASS, NOISE_CLASS, backend, time_scale=1, s
                 traj_sum += zero_counts
             no_sig_prob.append(traj_sum/shots/num_sig_trajs)
     no_sig_prob = np.array(no_sig_prob)
-    
+
     sig_prob = []
     for elem in range(len(pop)):
         traj_sum = 0
@@ -320,6 +325,6 @@ def cost_sig_noise_qasm(pop, SIGNAL_CLASS, NOISE_CLASS, backend, time_scale=1, s
             traj_sum += zero_counts
         sig_prob.append(traj_sum/shots/num_sig_trajs)
     sig_prob = np.array(sig_prob)
-    
+
     fitness = no_sig_prob - sig_prob
     return fitness

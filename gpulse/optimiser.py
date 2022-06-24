@@ -86,7 +86,13 @@ def create_job(inputs=None):
     optimise : str
             Expects 'max' or 'min' deciding whether to maximise or mimise the cost
             function.
-
+    backend_type : str, opt
+                Expects either "OVERLAP" (default) or "QASM". Allows signal averaging for
+                QASM based cost functions.
+    MAX_NOISE_TRAJS : int, opt
+                Number of noise trajectories to average over. Default is 1.
+    MAX_SIGNAL_TRAJS'  : 1
+                Number of signal trajectories to average over. Default is 1.
     """
 
     params = {
@@ -110,7 +116,10 @@ def create_job(inputs=None):
               'cfn_kwargs'        : [],
               'pop_init'          : None,
               'pinit_args'        : None,
-              'optimise'          : 'max'
+              'optimise'          : 'max',
+              'backend_type'      : 'OVERLAP',
+              'MAX_NOISE_TRAJS'   : 1,
+              'MAX_SIGNAL_TRAJS'  : 1
               }
     # Add user defined values
     if not inputs is None:
@@ -253,7 +262,7 @@ class Optimiser:
             stats.register("std", np.std)
             stats.register("min", np.min)
             stats.register("max", np.max)
-            
+
             # Create class to track best individual
             best_ind = tools.HallOfFame(1)
             best_ind.update(pop)
@@ -267,7 +276,7 @@ class Optimiser:
             logbook.record(gen=0, **record)
             logbook.header = "gen", "max", "avg", 'min', 'std'
 
-            
+
 
 
             # Run genetic aglorithm over NGEN generations
@@ -319,7 +328,7 @@ class Optimiser:
 
                 # Update generation.
                 pop[:] = offspring
-                
+
                 # Update best ind
                 best_ind.update(pop)
 
@@ -328,7 +337,7 @@ class Optimiser:
                 record['best'] = best_ind[0]
                 logbook.record(gen=g, **record )
 
-                
+
 
                 # print output every NGEN / 10 generations.
                 if (g % (j['NGEN']/10) == 0) or (g == j['NGEN']-1):
