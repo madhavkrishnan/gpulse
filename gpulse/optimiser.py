@@ -11,7 +11,7 @@ def create_job(inputs=None):
     """
     Parameters
     ----------
-    input : dict, optional
+    inputs : dict, optional
         dictionary with algorithm parameters to use as input for gpulse.Optimiser.
         If not provided, a default template is generated. Cost function args and kwargs
         can be specified after generation.The first argument of the cost function is
@@ -79,6 +79,11 @@ def create_job(inputs=None):
             Positional arguments after the pulse individual for the cost function
     cfn_kwargs : dict
             Keyword arguments of the cost function.
+    pop_init : function, opt
+            function used to initialise the population. Defaults to None if not specified
+            and gpulse.Optimiser will use the default init_ind function.
+    pinit_args : tuple,
+            Positional arguments for the pop_init function.
     optimise : str
             Expects 'max' or 'min' deciding whether to maximise or mimise the cost
             function.
@@ -104,6 +109,8 @@ def create_job(inputs=None):
               'cost_function'     : cost_sig_noise,
               'cfn_args'          : [],
               'cfn_kwargs'        : [],
+              'pop_init'          : None,
+              'pinit_args'        : None,
               'optimise'          : 'max'
               }
     # Add user defined values
@@ -193,11 +200,20 @@ class Optimiser:
             # Register a crossover function
             toolbox.register("mate", cx)
 
+            # If a population initialisation function has been passed to the
+            # optimiser, it will use it instead of the default one deap_tools.init_ind
+            if j['pop_init'] is not None:
+                pop_init = j['pop_init']
+                init_args = j['pinit_args']
+            else:
+                # Default initialiser
+                pop_init = init_ind
+                init_args = ([j['TAU_MIN'], j['TAU_MAX']], [j['X_ROT_MIN'], j['X_ROT_MAX']])
+
             # Register generator for individual
             toolbox.register("attr_int",
-                            init_ind,
-                            [j['TAU_MIN'], j['TAU_MAX']],
-                            [j['X_ROT_MIN'], j['X_ROT_MAX']]
+                            pop_init,
+                            *init_args
                             )
 
             toolbox.register("individual", tools.initRepeat,
@@ -316,7 +332,7 @@ class Optimiser:
                 
 
                 # print output every NGEN / 10 generations.
-                if (g % (j['NGEN']/10) == 0) or (g == j['NGEN']):
+                if (g % (j['NGEN']/10) == 0) or (g == j['NGEN']-1):
                     fid = [ind.fitness.values[0] for ind in pop]
                     tau_str = [str(best_ind[0][i][0]) for i in range(len(best_ind[0]))]
                     rot_str = [ '2π/' + str(best_ind[0][i][1]) for i in range(len(best_ind[0]))]

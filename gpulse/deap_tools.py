@@ -12,8 +12,18 @@ def snip(ind):
     del ind[cut:]
     return ind
 
-def init_ind(tau_lims, rot_lims):
+def init_ind(*args):
+    """
+    Helper function to initialise a population.
 
+    The function is set up  
+
+    Parameters
+    ----------
+    args :
+
+    """
+    tau_lims, rot_lims = args
     tau_min, tau_max = tau_lims
     rot_min, rot_max = rot_lims
 

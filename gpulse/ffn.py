@@ -1,9 +1,9 @@
 # This file contains code to compute the filter function for
-# a pulse sequence defined using rotation angles.
+# a CPMG ansatz pulse sequence defined using rotation angles and .
 
 import numpy as np
 
-def switching_function(pulse_rot, taus=None):
+def switching_function(pulse_rot, taus=None, ansatz="CPMG"):
     """
     Function to generate the switching function list of given interpulse spacings
 
@@ -13,25 +13,43 @@ def switching_function(pulse_rot, taus=None):
         pulse_rot : list
             sequence of pulse rotations - [a, b, c] is treated as [pi/a, pi/b, pi/c]
     taus : list, opt
-        a list of tau spacings for eg [2, 3] corresponds to the sequence:
+        a list of tau spacings
+    ansatz : str, opt
+        Expects either "CPMG" which is default or None. If CPMG for eg. tau
+        spacings  [2, 3] corresponds to the sequence:
         I-I-Rx-I-I-I-I-Rx-I-I + I-I-I-Rx-I-I-I-I-I-I-Rx-I-I-I
+        For anything else,
+        I-I-Rx-I-I + I-I-I-Rx-I-I-I
+
+
+
 
     Returns
     -------
     switching_function : list
         Indicator function which flips between +1 and -1 when an rx pulse is applied.
-        For eg: taus = [2, 3] should return:
+        For eg: anstaz="CPMG" and taus = [2, 3] should return:
         [1, 1, -1, -1, -1, -1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, 1, 1, 1]
 
     """
+
+    # Checks if Taus is provided as kwarg otherwise creates a default sequence.
     if taus is None:
         taus = [5]*len(pulse_rot)
 
     # Convert pulse_rot list to angles
     pulse_rot = [2*np.pi / ele for ele in pulse_rot]
 
+    # sequence length multiplier for different ansatz
+
+    smul = 1
+    if ansatz == "CPMG":
+        smul = 4
+    elif ansatz == 'Spin_Lock':
+        smul = 2
+
     # Compute length of phase_list
-    length = 4 * sum(taus)
+    length = smul * sum(taus)
 
     # initialise phase list
     phase_list = [0]*length
@@ -40,11 +58,19 @@ def switching_function(pulse_rot, taus=None):
     for idx, tau in enumerate(taus):
 
         # current position in the sequence
-        pos =  4 * sum(taus[:idx])
+        pos =  smul * sum(taus[:idx])
 
         # add rx rotations
+        # print(pos,tau, len(phase_list))
+        # Ignore last phase rotation in general case t1-Rx1-t2-Rx2-t3
+        if not ansatz in ["CPMG", "Spin_Lock"]:
+            if idx == len(taus) - 1:
+                break
+
         phase_list[pos + tau] = pulse_rot[idx]
-        phase_list[pos + 3 * tau ] = pulse_rot[idx]
+
+        if ansatz == "CPMG":
+            phase_list[pos + 3 * tau ] = pulse_rot[idx]
 
     # generate switching function
     # print(phase_list)
@@ -55,7 +81,7 @@ def switching_function(pulse_rot, taus=None):
     # return switching_function
     return f_yz, f_zz
 
-def filter_function(pulse_rot, time_scale=1, num_points=512,  taus=None):
+def filter_function(pulse_rot, time_scale=1, num_points=512,  taus=None, ansatz='CPMG'):
     """
     Generate the filter function given a list of interpulse times
 
@@ -73,7 +99,13 @@ def filter_function(pulse_rot, time_scale=1, num_points=512,  taus=None):
 
     taus : list, opt
         a list of tau spacings for eg [2, 3] corresponds to the sequence:
+
+    ansatz : str, opt
+        Expects either "CPMG" which is default or None. If CPMG for eg. tau
+        spacings  [2, 3] corresponds to the sequence:
         I-I-Rx-I-I-I-I-Rx-I-I + I-I-I-Rx-I-I-I-I-I-I-Rx-I-I-I
+        For anything else,
+        I-I-Rx-I-I-I-Rx
 
     Returns
     -------
@@ -88,7 +120,7 @@ def filter_function(pulse_rot, time_scale=1, num_points=512,  taus=None):
 
     # Generate switching function
     # SF = switching_function(pulse_rot, taus=taus)
-    f_yz, f_zz = switching_function(pulse_rot, taus=taus)
+    f_yz, f_zz = switching_function(pulse_rot, taus=taus, ansatz=ansatz)
 
     # Generate frequencies
     w = np.arange(0, 2*num_points) * 2 * np.pi / (2*num_points*time_scale)
@@ -108,7 +140,7 @@ def filter_function(pulse_rot, time_scale=1, num_points=512,  taus=None):
 
     return w, FF
 
-def chi(pulse_rot, PSD, time_scale=1, taus=None):
+def chi(pulse_rot, PSD, time_scale=1, taus=None, ansatz='CPMG'):
     """
     Computes the decay constant given the inter-pulse spacing and power spectral density
 
@@ -125,7 +157,13 @@ def chi(pulse_rot, PSD, time_scale=1, taus=None):
 
     taus : list, opt
         a list of tau spacings for eg [2, 3] corresponds to the sequence:
+
+    ansatz : str, opt
+        Expects either "CPMG" which is default or None. If CPMG for eg. tau
+        spacings  [2, 3] corresponds to the sequence:
         I-I-Rx-I-I-I-I-Rx-I-I + I-I-I-Rx-I-I-I-I-I-I-Rx-I-I-I
+        For anything else,
+        I-I-Rx-I-I-I-Rx
 
     Returns
     -------
@@ -134,12 +172,12 @@ def chi(pulse_rot, PSD, time_scale=1, taus=None):
     """
 
 
-    w, FF = filter_function(pulse_rot, time_scale=time_scale, taus=taus)
+    w, FF = filter_function(pulse_rot, time_scale=time_scale, taus=taus, ansatz=ansatz)
 
     chi = np.trapz(FF * PSD / time_scale, w) / (2 * np.pi )
     return chi
 
-def decay_probability(pulse_rot, PSD, time_scale=1, taus=None,zipped=False):
+def decay_probability(pulse_rot, PSD, time_scale=1, taus=None,zipped=False, ansatz='CPMG'):
     """
     Computes the probability of measuring zero on average after applying the CPMG pulse
 
@@ -157,7 +195,13 @@ def decay_probability(pulse_rot, PSD, time_scale=1, taus=None,zipped=False):
 
     taus : list, opt
     a list of tau spacings for eg [2, 3] corresponds to the sequence:
-    I-I-Rx-I-I-I-I-Rx-I-I + I-I-I-Rx-I-I-I-I-I-I-Rx-I-I-I
+
+    ansatz : str, opt
+        Expects either "CPMG" which is default or None. If CPMG for eg. tau
+        spacings  [2, 3] corresponds to the sequence:
+        I-I-Rx-I-I-I-I-Rx-I-I + I-I-I-Rx-I-I-I-I-I-I-Rx-I-I-I
+        For anything else,
+        I-I-Rx-I-I-I-Rx
 
     Returns
     -------
@@ -174,5 +218,5 @@ def decay_probability(pulse_rot, PSD, time_scale=1, taus=None,zipped=False):
         taus = list(taus)
         pulse_rot = list(pulse_rot)
 
-    p0 = 0.5 * (1 + np.exp(-chi(pulse_rot, PSD, time_scale=time_scale, taus=taus)) )
+    p0 = 0.5 * (1 + np.exp(-chi(pulse_rot, PSD, time_scale=time_scale, taus=taus, ansatz=ansatz)) )
     return p0
