@@ -5,6 +5,7 @@ from gpulse.costfn import cost_sig_noise
 from deap import base, tools, creator
 from gpulse.deap_tools import mutate, init_ind, cx, snip
 import copy
+import pickle as pk
 
 def create_job(inputs=None):
     """
@@ -322,8 +323,13 @@ class Optimiser:
 
                     best_formated = " ".join(tau_str) + ' | ' + " ".join(rot_str)
                     print(f'{g} \t\t {best_formated} ')
+                    
+                if j['cfn_kwargs']['backend'].name() != 'qasm_simulator':
+                    pk.dump([logbook, best_ind[0][:]], open('%s_ga-run_temp.p' % j['cfn_kwargs']['backend'].name(), 'wb'))
+                    
             print('\n')
             results.append([logbook, best_ind[0][:]])
+                       
 
         self.results = copy.deepcopy(results)
         return results
