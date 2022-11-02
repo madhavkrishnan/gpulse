@@ -291,11 +291,14 @@ def cost_sig_noise_qasm(pop, SIGNAL_CLASS, NOISE_CLASS, backend, time_scale=1, s
         job = qk.execute(list(circuit_dict.values()), backend=backend, shots=shots, optimization_level=0)
         results = job.result()
     else:
-        job_manager = IBMQJobManager()
-        job_set = job_manager.run(list(circuit_dict.values()), backend=backend, name='var-sig-detect', shots=shots,
-                                 optimization_level=0)
-        results = job_set.results()
-
+        #job_manager = IBMQJobManager()
+        # trans_circs = qk.transpile(list(circuit_dict.values()), backend=backend, optimization_level=0)
+        # job_set = job_manager.run(trans_circs, backend=backend, name='var-sig-detect', shots=shots)
+        #job_set = job_manager.run(list(circuit_dict.values()), backend=backend, name='var-sig-detect', shots=shots)
+        #results = job_set.results()
+        job = qk.execute(list(circuit_dict.values()), backend=backend, shots=shots, optimization_level=0)
+        results = job.result()
+    
     # Compile fitness
     no_sig_prob = []
     if num_noise_trajs == 0:

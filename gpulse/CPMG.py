@@ -278,6 +278,7 @@ class CPMGCircuit:
 
         # Encoding in y basis
         circuit.ry(np.pi / 2, 0)
+        circuit.barrier(0)
 
         # initialise indices to track gate paramaters
         phi_counter = 0
@@ -287,25 +288,33 @@ class CPMGCircuit:
             # gates before first control pulse
             for idx in range(tau):
                 circuit.i(0)
+                circuit.barrier(0)
                 circuit.rz(self.phi_params[phi_counter], 0)
+                circuit.barrier(0)
                 phi_counter += 1
 
             # first control pulse
             circuit.rx(self.pulse_rotation[control_counter], 0)
+            circuit.barrier(0)
 
             # gates after first pulse
             for idx in range(2*tau):
                 circuit.i(0)
+                circuit.barrier(0)
                 circuit.rz(self.phi_params[phi_counter], 0)
+                circuit.barrier(0)
                 phi_counter += 1
 
             # second control pulse
             circuit.rx(self.pulse_rotation[control_counter], 0)
+            circuit.barrier(0)
 
             # gates after second pulse
             for idx in range(tau):
                 circuit.i(0)
+                circuit.barrier(0)
                 circuit.rz(self.phi_params[phi_counter], 0)
+                circuit.barrier(0)
                 phi_counter += 1
             # update pulse counter
             control_counter += 1
