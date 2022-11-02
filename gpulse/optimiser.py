@@ -86,7 +86,13 @@ def create_job(inputs=None):
     optimise : str
             Expects 'max' or 'min' deciding whether to maximise or mimise the cost
             function.
-
+    backend_type : str, opt
+                Expects either "OVERLAP" (default) or "QASM". Allows signal averaging for
+                QASM based cost functions.
+    MAX_NOISE_TRAJS : int, opt
+                Number of noise trajectories to average over. Default is 1.
+    MAX_SIGNAL_TRAJS'  : 1
+                Number of signal trajectories to average over. Default is 1.
     """
 
     params = {
@@ -110,7 +116,10 @@ def create_job(inputs=None):
               'cfn_kwargs'        : [],
               'pop_init'          : None,
               'pinit_args'        : None,
-              'optimise'          : 'max'
+              'optimise'          : 'max',
+              'backend_type'      : 'OVERLAP',
+              'MAX_NOISE_TRAJS'   : 1,
+              'MAX_SIGNAL_TRAJS'  : 1
               }
     # Add user defined values
     if not inputs is None:
@@ -222,8 +231,19 @@ class Optimiser:
             toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
             # list decides number of shots with increasing generation, when using
-            # the filter function, this decides the number of Poisson trials.
-            shots = list(map(int, np.linspace(1, j['MAX_SHOTS'], j['NGEN'] + 1)))
+            # the filter function, this decides the number of Poisson trials. For QASM it decides the
+            # number of shots. 
+
+            if j['fixed_shots']:
+                # set all shots = max shots.
+                shots  = [j['MAX_SHOTS']]*j['NGEN']
+                
+            else:
+                shots = list(map(int, np.linspace(1, j['MAX_SHOTS'], j['NGEN'] + 1)))
+            
+            if j['backend_type'] == 'QASM':
+                num_sig_trajs = list(map(int, np.linspace(1, j['MAX_SIGNAL_TRAJS'], j['NGEN'] + 1)))
+                num_noise_trajs = list(map(int, np.linspace(1, j['MAX_NOISE_TRAJS'], j['NGEN'] + 1)))
 
             # Build a population
             pop = toolbox.population(n=j['POP_SIZE'])
@@ -233,9 +253,14 @@ class Optimiser:
                 pop = list(toolbox.map(snip, pop))
 
             # Evaluate the fitness of the population.
-            fitness = [toolbox.evaluate(ind, shots=shots[0]) for ind in pop]
-            for ind, fit in zip(pop, fitness):
-                ind.fitness.values = fit
+            if j['backend_type'] == 'OVERLAP':
+                fitness = [toolbox.evaluate(ind, shots=shots[0]) for ind in pop]
+                for ind, fit in zip(pop, fitness):
+                    ind.fitness.values = fit
+            elif j['backend_type'] == 'QASM':
+                fitness = toolbox.evaluate(pop, shots=shots[0], num_sig_trajs=num_sig_trajs[0], num_noise_trajs=num_noise_trajs[0])
+                for ind, fit in zip(pop, fitness):
+                    ind.fitness.values = fit,
 
             # Define a statistics class to capture population statistics
             stats = tools.Statistics(key=lambda ind: ind.fitness.values)
@@ -246,18 +271,20 @@ class Optimiser:
             stats.register("min", np.min)
             stats.register("max", np.max)
 
+            # Create class to track best individual
+            best_ind = tools.HallOfFame(1)
+            best_ind.update(pop)
 
             # Get the stats of the current population
             record = stats.compile(pop)
+            record['best'] = best_ind[0]
 
             # Create a log object
             logbook = tools.Logbook()
             logbook.record(gen=0, **record)
             logbook.header = "gen", "max", "avg", 'min', 'std'
 
-            # Create class to track best individual
-            best_ind = tools.HallOfFame(1)
-            best_ind.update(pop)
+
 
 
             # Run genetic aglorithm over NGEN generations
@@ -290,7 +317,11 @@ class Optimiser:
                 offspring.append(best_ind[0])
 
                 # Re-evaluate fitness of all individuals
-                fitnesses = [toolbox.evaluate(ind, shots=shots[g]) for ind in offspring]
+                # fitnesses = [toolbox.evaluate(ind, shots=shots[g]) for ind in offspring]
+                if j['backend_type'] == 'OVERLAP':
+                    fitnesses = [toolbox.evaluate(ind, shots=shots[g]) for ind in offspring]
+                elif j['backend_type'] == 'QASM':
+                    fitnesses = toolbox.evaluate(offspring, shots=shots[g], num_sig_trajs=num_sig_trajs[g], num_noise_trajs=num_noise_trajs[g])
 
                 # Update fitness
                 for ind, fit in zip(offspring, fitnesses):
@@ -298,17 +329,23 @@ class Optimiser:
                     #     print("Zero fit")
                     #     break
                     del ind.fitness.values
-                    ind.fitness.values = fit
+                    if j['backend_type'] == 'OVERLAP':
+                        ind.fitness.values = fit
+                    elif j['backend_type'] == 'QASM':
+                        ind.fitness.values = fit,
 
                 # Update generation.
                 pop[:] = offspring
 
-                # Record fitness statistics for new generation.
-                record = stats.compile(pop)
-                logbook.record(gen=g, **record )
-
                 # Update best ind
                 best_ind.update(pop)
+
+                # Record fitness statistics for new generation.
+                record = stats.compile(pop)
+                record['best'] = best_ind[0]
+                logbook.record(gen=g, **record )
+
+
 
                 # print output every NGEN / 10 generations.
                 if (g % (j['NGEN']/10) == 0) or (g == j['NGEN']-1):
@@ -319,7 +356,7 @@ class Optimiser:
                     best_formated = " ".join(tau_str) + ' | ' + " ".join(rot_str)
                     print(f'{g} \t\t {best_formated} ')
             print('\n')
-            results.append([logbook, best_ind[0][:]])
+            results.append([logbook, best_ind[0][:], j])
 
         self.results = copy.deepcopy(results)
         return results

@@ -1,7 +1,7 @@
 # Define classes used to build the noise model and CPMG circuit
 
 from scipy.linalg import norm
-from scipy.signal import lfilter, firwin, freqz
+from scipy.signal import lfilter, firwin, freqz, zpk2tf
 import numpy as np
 from numpy.random import standard_normal
 from qiskit import QuantumCircuit
@@ -49,31 +49,48 @@ class Noise:
 
     """
 
-    def __init__(self, power, length, cutoff, w0):
+    def __init__(self, power, length, cutoff, peaks, weights=[1], worN=512):
         """
         Parameters
         ----------
-        power : float
+        power   : float
             decides the power of the signal - this is equal to the area under the
             curve of s(w).
-        length : int
+        length  : int
             length of the initial filter
-        cutoff : float
+        cutoff  : float
             cutoff frequency of the initial filter
-        w0 : float
-            central frequency of the signal
+        peaks   : float or list
+            Frequency peaks of the signal
+        weights : list, opt
+            ratio of peaks weights signal will be generated for each peak and combined
+            as sum weights[i]signal_i. Default value is for single unweighted peak.
+        worN    : int, opt
+            Number of points generated in the frequency domain.
+
+
         """
 
         self.power = power
         self.length = length
         self.cutoff = cutoff
-        self.w0 = w0
-        self.coeffcients = firwin(length, cutoff) * np.cos( np.pi * w0 * np.arange(length))
+        self.worN = worN
+
+        # Convert w0 into list if it is not
+
+        self.peaks = [peaks] if not isinstance(peaks, list) else peaks
+
+        # Generate multi peak filter
+        coeff = 0
+        for p, w in zip(self.peaks, weights):
+            coeff += w * firwin(length, cutoff) * np.cos( np.pi * p * np.arange(length))
+        self.coefficients = coeff
+
         # normalises numerator so that sum(abs(h)**2)*w[1] = power
-        self.coeffcients = self.coeffcients / norm(self.coeffcients) * np.sqrt(power)
+        self.coefficients = self.coefficients / norm(self.coefficients) * np.sqrt(power)
         # compute frequency response of the filter. denominator coeffcients are
         # assumed to be [1]
-        self.w, self.h = freqz(self.coeffcients, [1])
+        self.w, self.h = freqz(self.coefficients, [1], worN=self.worN)
         self.upsample_length = None
         self.noise = None
 
@@ -90,10 +107,62 @@ class Noise:
         self.upsample_length = upsample_length
 
         # signal is upsampled and first 1000 transients are excluded
-        self.noise =  lfilter(self.coeffcients, [1], standard_normal(upsample_length + 1000))[1000:]
+        self.noise =  lfilter(self.coefficients, [1], standard_normal(upsample_length + 1000))[1000:]
 
         # returns a copy of the signal
         return np.copy(self.noise)
+
+
+class FAlphaNoise:
+
+    """
+    Class to generate 1/f^alpha noise
+    """
+
+    def __init__(self, power, alpha, gate_time=1, N = 2048):
+        wl = .001*np.pi
+        wh = 0.5*np.pi
+        Nf = np.ceil(2.5*(np.log10(wh)-np.log10(wl)))
+        delp = (np.log10(wh)-np.log10(wl))/Nf
+        logps = np.log10(wl)+.5*(1-alpha/2.)*delp + np.arange(Nf)*delp
+        logzs = logps+alpha/2.*delp
+        ps = 10**(logps)
+        zs = 10**(logzs)
+        pstx = (1-ps)/(1+ps)
+        zstx = (1-zs)/(1+zs)
+
+        b, a = zpk2tf(zstx,pstx,k=1e-4)
+        w_pa,h_pa = freqz(b, a, worN=N, whole=True)
+        f_nyq = 0.5*1/gate_time
+        f = w_pa/np.pi*f_nyq
+
+        pre_power = np.sum(np.abs(h_pa)**2)*f[1]
+        self.coefficients = b/np.sqrt(pre_power)*np.sqrt(power)
+
+        self.denom_coefficients = a
+        self.w, self.h = freqz(self.coefficients, self.denom_coefficients, worN=N)
+        self.upsample_length = None
+        self.noise = None
+
+
+    def generate_noise(self, upsample_length):
+        """
+        Generates the upsampled noise signal
+
+        Parameters
+        ----------
+        upsample_length : int
+            the length to which the base signal is upsampled
+        """
+
+        self.upsample_length = upsample_length
+
+        # signal is upsampled and first 1000 transients are excluded
+        self.noise =  lfilter(self.coefficients, self.denom_coefficients, standard_normal(upsample_length + 1000))[1000:]
+
+        # returns a copy of the signal
+        return np.copy(self.noise)
+
 
 class CPMGCircuit:
     """
@@ -138,11 +207,24 @@ class CPMGCircuit:
         # defines the rotation angle for each pulse cycle
         if pulse_rotation is None:
             self.pulse_rotation = [np.pi]*len(self.taus)
-        # initialise circuit library
-        # self.circuit_lib = {}
+        else:
+            self.pulse_rotation = [2*np.pi/theta for theta in pulse_rotation]
+#         # initialise circuit library
+#         # self.circuit_lib = {}
+
+#         # Define signal/noise
+#         if signal == None:
+#             self.signal = np.zero(len(self.taus))
+#         else:
+#             self.signal = signal
+#         if noise == None:
+#             self.noise = np.zero(len(self.taus))
+#         else:
+#             self.noise = noise
+#         self.dephasing_rot = self.signal + self.noise
 
         # builds the parameterised CMPG circuit
-        self.circuit = self.build_circuit(self.taus)
+        self.circuit = self.build_circuit(self.taus, self.pulse_rotation)
 
         # binds the signal instance to the circuit
         # self.circuit = self.bind_circuit(self.unbound_circuit, self.noise)
@@ -150,7 +232,7 @@ class CPMGCircuit:
     def get_circuit(self):
         return self.circuit.copy()
 
-    def build_circuit(self, taus):
+    def build_circuit(self, taus, pulse_rotation):
         """
         Function to build the CMPG circuit.
 
@@ -186,7 +268,84 @@ class CPMGCircuit:
         self.taus = taus
 
         # TODO: Add pulse rotation specification to build_circuit.
-        self.pulse_rotation = [np.pi] * len(self.taus)
+        #self.pulse_rotation = [np.pi] * len(self.taus)
+        self.pulse_rotation = pulse_rotation
+
+        rz_count = 4 * sum(self.taus)
+        self.phi_params = ParameterVector("phi", rz_count)
+        # builds circuit
+        circuit = QuantumCircuit(1,1)
+
+        # Encoding in y basis
+        circuit.ry(np.pi / 2, 0)
+
+        # initialise indices to track gate paramaters
+        phi_counter = 0
+        control_counter = 0
+        # Building unbound parametrised circuit
+        for tau in self.taus:
+            # gates before first control pulse
+            for idx in range(tau):
+                circuit.i(0)
+                circuit.rz(self.phi_params[phi_counter], 0)
+                phi_counter += 1
+
+            # first control pulse
+            circuit.rx(self.pulse_rotation[control_counter], 0)
+
+            # gates after first pulse
+            for idx in range(2*tau):
+                circuit.i(0)
+                circuit.rz(self.phi_params[phi_counter], 0)
+                phi_counter += 1
+
+            # second control pulse
+            circuit.rx(self.pulse_rotation[control_counter], 0)
+
+            # gates after second pulse
+            for idx in range(tau):
+                circuit.i(0)
+                circuit.rz(self.phi_params[phi_counter], 0)
+                phi_counter += 1
+            # update pulse counter
+            control_counter += 1
+
+        # Decoding in y basis
+        circuit.ry(-np.pi / 2, 0)
+        circuit.measure(0, 0)
+
+        # self.circuit_lib[circ_key] = circuit.copy()
+
+        self.circuit = circuit.copy()
+        return circuit
+
+
+
+class RxRyCircuit(CPMGCircuit):
+
+
+    def build_circuit(self, taus, pulse_rotation):
+        """
+        Function to build RxRy circuit.
+
+        Parameters
+        ----------
+        taus : array_like
+            sequence of tau values defining the interpulse timing
+
+        pulse_rotations : array_like
+            sequence of angle values defining the rotation angle for
+            the control pulse
+
+        Returns
+        -------
+        circuit : Qiskit.QuantumCircuit
+            Parameterisd circuit with signal and RxRy pulses
+        """
+
+        self.taus = taus
+
+        self.pulse_rotation = pulse_rotation
 
         rz_count = 4 * sum(self.taus)
         self.phi_params = ParameterVector("phi", rz_count)
