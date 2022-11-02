@@ -231,8 +231,16 @@ class Optimiser:
             toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
             # list decides number of shots with increasing generation, when using
-            # the filter function, this decides the number of Poisson trials.
-            shots = list(map(int, np.linspace(1, j['MAX_SHOTS'], j['NGEN'] + 1)))
+            # the filter function, this decides the number of Poisson trials. For QASM it decides the
+            # number of shots. 
+
+            if j['fixed_shots']:
+                # set all shots = max shots.
+                shots  = [j['MAX_SHOTS']]*j['NGEN']
+                
+            else:
+                shots = list(map(int, np.linspace(1, j['MAX_SHOTS'], j['NGEN'] + 1)))
+            
             if j['backend_type'] == 'QASM':
                 num_sig_trajs = list(map(int, np.linspace(1, j['MAX_SIGNAL_TRAJS'], j['NGEN'] + 1)))
                 num_noise_trajs = list(map(int, np.linspace(1, j['MAX_NOISE_TRAJS'], j['NGEN'] + 1)))
@@ -348,7 +356,7 @@ class Optimiser:
                     best_formated = " ".join(tau_str) + ' | ' + " ".join(rot_str)
                     print(f'{g} \t\t {best_formated} ')
             print('\n')
-            results.append([logbook, best_ind[0][:]])
+            results.append([logbook, best_ind[0][:], j])
 
         self.results = copy.deepcopy(results)
         return results
