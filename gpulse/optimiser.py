@@ -6,6 +6,7 @@ from deap import base, tools, creator
 from gpulse.deap_tools import mutate, init_ind, cx, snip
 import copy
 import pickle as pk
+import multiprocessing as mp
 
 def create_job(inputs=None):
     """
@@ -95,6 +96,7 @@ def create_job(inputs=None):
               'fixed_rotation'    : False,
               'fixed_timing'      : False,
               'fixed_shots'       : False,
+              'fixed_trajs'       : False,
               'NGEN'              : 50,
               'POP_SIZE'          : 100,
               'MUTPB'             : 0.5,
@@ -110,8 +112,11 @@ def create_job(inputs=None):
               'cfn_args'          : [],
               'cfn_kwargs'        : [],
               'pop_init'          : None,
-              'pinit_args'        : None,
-              'optimise'          : 'max'
+              'pinit_args'        : None, 
+              'pop_seed'          : False, 
+              'optimise'          : 'max',
+              'print'             : True,
+              'multiprocessing'   : False
               }
     # Add user defined values
     if not inputs is None:
@@ -156,9 +161,10 @@ class Optimiser:
         results = []
         count = 1
         for j in self.jobs:
-
-            print('Job ' + str(count))
-            print('------')
+            if j['print'] == True:
+                print('Job ' + str(count))
+                print('------')
+            #print('Saving to %s' % j['fname'])
             count += 1
             # Set up deap functions
 
@@ -199,10 +205,16 @@ class Optimiser:
 
             # Register a crossover function
             toolbox.register("mate", cx)
+            
+            # Initialize multiprocessing if called
+            if j['multiprocessing'] == True:
+                pool = mp.Pool(j['proc_count'])
+                toolbox.register("map", pool.map)
 
             # If a population initialisation function has been passed to the
             # optimiser, it will use it instead of the default one deap_tools.init_ind
-            if j['pop_init'] is not None:
+            # if j['pop_seed'] == False:
+            if (j['pop_init'] is not None) and (j['pop_seed'] == 'repeated'):
                 pop_init = j['pop_init']
                 init_args = j['pinit_args']
             else:
@@ -218,23 +230,44 @@ class Optimiser:
 
             toolbox.register("individual", tools.initRepeat,
             creator.Individual, toolbox.attr_int, n=j['CPMG_CYCLES'])
+            # else:
+            #     pass
+                # toolbox.register("individual", j['pop_init'], creator.Individual)
 
             # Define function to build a population
             toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
             # list decides number of shots with increasing generation, when using
             # the filter function, this decides the number of Poisson trials.
-            shots = list(map(int, np.linspace(1, j['MAX_SHOTS'], j['NGEN'] + 1)))
+            if j['fixed_shots'] == False:
+                shots = list(map(int, np.linspace(1, j['MAX_SHOTS'], j['NGEN'] + 1)))
+            else:
+                shots = j['MAX_SHOTS']*np.ones(j['NGEN']+1, dtype=int)
             if j['backend_type'] == 'QASM':
-                num_sig_trajs = list(map(int, np.linspace(1, j['MAX_SIGNAL_TRAJS'], j['NGEN'] + 1)))
-                num_noise_trajs = list(map(int, np.linspace(1, j['MAX_NOISE_TRAJS'], j['NGEN'] + 1)))
+                if j['fixed_trajs'] == False:
+                    num_sig_trajs = list(map(int, np.linspace(1, j['MAX_SIGNAL_TRAJS'], j['NGEN'] + 1)))
+                    num_noise_trajs = list(map(int, np.linspace(1, j['MAX_NOISE_TRAJS'], j['NGEN'] + 1)))
+                else:
+                    num_sig_trajs = j['MAX_SIGNAL_TRAJS']*np.ones(j['NGEN']+1, dtype=int)
+                    num_noise_trajs = j['MAX_NOISE_TRAJS']*np.ones(j['NGEN']+1, dtype=int)
+            elif j['backend_type'] == 'OVERLAP_SAMPLED':
+                # print('setting trajectories...')
+                num_trajs = j['MAX_TRAJS']*np.ones(j['NGEN']+1, dtype=int)
+                # print(num_trajs)
+                
 
             # Build a population
             pop = toolbox.population(n=j['POP_SIZE'])
+            
+            if j['pop_seed'] == 'pretrained':
+                for i in range(len(pop)):
+                    pop[i][:] = j['pop_init'][i][:]
 
             # If variable cycles, randomise population cycle length
-            if not j['fixed_cycles']:
+            if (not j['fixed_cycles']) and (j['pop_seed'] != 'pretrained'):
                 pop = list(toolbox.map(snip, pop))
+                
+            # print(pop)
 
             # Evaluate the fitness of the population.
             if j['backend_type'] == 'OVERLAP':
@@ -245,6 +278,11 @@ class Optimiser:
                 fitness = toolbox.evaluate(pop, shots=shots[0], num_sig_trajs=num_sig_trajs[0], num_noise_trajs=num_noise_trajs[0])
                 for ind, fit in zip(pop, fitness):
                     ind.fitness.values = fit,
+            elif j['backend_type'] == 'OVERLAP_SAMPLED':
+                # print('calculating pop fitness...')
+                fitness = [toolbox.evaluate(ind, shots=shots[0], num_trajs=num_trajs[0]) for ind in pop]
+                for ind, fit in zip(pop, fitness):
+                    ind.fitness.values = fit
 
             # Define a statistics class to capture population statistics
             stats = tools.Statistics(key=lambda ind: ind.fitness.values)
@@ -273,9 +311,10 @@ class Optimiser:
 
             # Run genetic aglorithm over NGEN generations
             # print output headers
-            print("Generation \t\t Best Individual" )
-            print('\t\t      τ1 τ2..τn | θ1 θ2..θn')
-            print('------'*10)
+            if j['print'] == True:
+                print("Generation \t\t Best Individual" )
+                print('\t\t      τ1 τ2..τn | θ1 θ2..θn')
+                print('------'*10)
             for g in range(1, j['NGEN'] ):
 
                 # Select offspring from current population
@@ -306,6 +345,11 @@ class Optimiser:
                     fitnesses = [toolbox.evaluate(ind, shots=shots[g]) for ind in offspring]
                 elif j['backend_type'] == 'QASM':
                     fitnesses = toolbox.evaluate(offspring, shots=shots[g], num_sig_trajs=num_sig_trajs[g], num_noise_trajs=num_noise_trajs[g])
+                elif j['backend_type'] == 'OVERLAP_SAMPLED':
+                    # print('calculating child fitnesses...')
+                    fitnesses = [toolbox.evaluate(ind, shots=shots[g], num_trajs=num_trajs[g]) for ind in offspring]
+                    for ind, fit in zip(pop, fitness):
+                        ind.fitness.values = fit
 
                 # Update fitness
                 for ind, fit in zip(offspring, fitnesses):
@@ -313,7 +357,7 @@ class Optimiser:
                     #     print("Zero fit")
                     #     break
                     del ind.fitness.values
-                    if j['backend_type'] == 'OVERLAP':
+                    if j['backend_type'] == 'OVERLAP' or j['backend_type'] == 'OVERLAP_SAMPLED':
                         ind.fitness.values = fit
                     elif j['backend_type'] == 'QASM':
                         ind.fitness.values = fit,
@@ -332,20 +376,25 @@ class Optimiser:
                 
 
                 # print output every NGEN / 10 generations.
-                if (g % (j['NGEN']/10) == 0) or (g == j['NGEN']-1):
-                    fid = [ind.fitness.values[0] for ind in pop]
-                    tau_str = [str(best_ind[0][i][0]) for i in range(len(best_ind[0]))]
-                    rot_str = [ '2π/' + str(best_ind[0][i][1]) for i in range(len(best_ind[0]))]
+                if j['print'] == True:
+                    if (g % (j['NGEN']/10) == 0) or (g == j['NGEN']-1):
+                        fid = [ind.fitness.values[0] for ind in pop]
+                        tau_str = [str(best_ind[0][i][0]) for i in range(len(best_ind[0]))]
+                        rot_str = [ '2π/' + str(best_ind[0][i][1]) for i in range(len(best_ind[0]))]
 
-                    best_formated = " ".join(tau_str) + ' | ' + " ".join(rot_str)
-                    print(f'{g} \t\t {best_formated} ')
+                        best_formated = " ".join(tau_str) + ' | ' + " ".join(rot_str)
+                        print(f'{g} \t\t {best_formated} ')
                     
-                if j['cfn_kwargs']['backend'].name() != 'qasm_simulator':
-                    pk.dump([logbook, best_ind[0][:]], open('%s_ga-run_temp.p' % j['cfn_kwargs']['backend'].name(), 'wb'))
-                    
-            print('\n')
+                if 'backend' in j['cfn_kwargs'].keys():
+                    if j['cfn_kwargs']['backend'].name() == 'HARDWARE':
+                    # pk.dump([logbook, best_ind[0][:]], open('%s_ga-run_temp.p' % j['cfn_kwargs']['backend'].name(), 'wb'))
+                        pk.dump([logbook, best_ind[0][:]], open(j['fname'], 'wb'))
+            if j['print'] == True:        
+                print('\n')
             results.append([logbook, best_ind[0][:]])
                        
-
+        if j['multiprocessing'] == True:
+            pool.close()
+            
         self.results = copy.deepcopy(results)
-        return results
+        return self.results, pop

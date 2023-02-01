@@ -103,8 +103,7 @@ class FAlphaNoise:
     Class to generate 1/f^alpha noise
     """
     
-    def __init__(self, power, alpha, gate_time=1):
-        N = 2048
+    def __init__(self, power, alpha, N=2048, gate_time=1):
         wl = .001*np.pi
         wh = 0.5*np.pi
         Nf = np.ceil(2.5*(np.log10(wh)-np.log10(wl)))
@@ -165,7 +164,7 @@ class CPMGCircuit:
     -------
     """
 
-    def __init__(self, taus=None, pulse_rotation=None):
+    def __init__(self, taus=None, pulse_rotation=None, flip_angle=0):
         """
         Parameters
         ----------
@@ -194,6 +193,8 @@ class CPMGCircuit:
             self.pulse_rotation = [np.pi]*len(self.taus)
         else:
             self.pulse_rotation = [2*np.pi/theta for theta in pulse_rotation]
+            
+        self.flip_angle = flip_angle
 #         # initialise circuit library
 #         # self.circuit_lib = {}
         
@@ -279,7 +280,7 @@ class CPMGCircuit:
                 phi_counter += 1
 
             # first control pulse
-            circuit.rx(self.pulse_rotation[control_counter], 0)
+            circuit.rx(self.pulse_rotation[control_counter]*(1 + self.flip_angle), 0)
             circuit.barrier(0)
 
             # gates after first pulse
@@ -291,7 +292,7 @@ class CPMGCircuit:
                 phi_counter += 1
 
             # second control pulse
-            circuit.rx(self.pulse_rotation[control_counter], 0)
+            circuit.rx(self.pulse_rotation[control_counter]*(1 + self.flip_angle), 0)
             circuit.barrier(0)
 
             # gates after second pulse

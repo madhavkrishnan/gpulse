@@ -81,7 +81,7 @@ def switching_function(pulse_rot, taus=None, ansatz="CPMG"):
     # return switching_function
     return f_yz, f_zz
 
-def filter_function(pulse_rot, time_scale=1, num_points=512,  taus=None, ansatz='CPMG'):
+def filter_function(pulse_rot, time_scale=1, num_points=4112,  taus=None, ansatz='CPMG'):
     """
     Generate the filter function given a list of interpulse times
 
