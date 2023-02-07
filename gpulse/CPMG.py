@@ -180,7 +180,7 @@ class CPMGCircuit:
     -------
     """
 
-    def __init__(self, taus=None, pulse_rotation=None):
+    def __init__(self, taus=None, pulse_rotation=None, measure=True):
         """
         Parameters
         ----------
@@ -195,6 +195,9 @@ class CPMGCircuit:
             self.taus = [1] * 5
         else:
             self.taus = taus
+
+        # Boolean to decide if a final measurement gate is added.
+        self.measure = measure
         # computes the number of signal gates needed for the CMPG sequence
         # the number of rz rotations in the circuit
         rz_count = 4 * sum(self.taus)
@@ -321,7 +324,9 @@ class CPMGCircuit:
 
         # Decoding in y basis
         circuit.ry(-np.pi / 2, 0)
-        circuit.measure(0, 0)
+
+        if self.measure:
+            circuit.measure(0, 0)
 
         # self.circuit_lib[circ_key] = circuit.copy()
 
