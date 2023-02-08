@@ -251,7 +251,8 @@ def cost_sig_noise_qasm(pop, SIGNAL_CLASS, NOISE_CLASS, backend, time_scale=1, s
         taus, pulse_rot  = unzipped_list
 
         # Construct parameterized circuit
-        cpmg_obj = CPMGCircuit(taus, pulse_rot)
+        measure = not backend.name() == 'unitary_simulator' 
+        cpmg_obj = CPMGCircuit(taus, pulse_rot, measure=measure)
         cpmg_circ = cpmg_obj.get_circuit()
 
         # grab parameters
@@ -287,9 +288,9 @@ def cost_sig_noise_qasm(pop, SIGNAL_CLASS, NOISE_CLASS, backend, time_scale=1, s
             circuit_dict['sig%d_traj%d' % (idx, traj_idx)] = bound_cpmg
 
     # Run circuits
-    if backend.name() == 'qasm_simulator':
+    if (backend.name() == 'qasm_simulator') or (backend.name() == 'unitary_simulator'):
         job = qk.execute(list(circuit_dict.values()), backend=backend, shots=shots, optimization_level=0)
-        results = job.result()
+        results = job.result()  
     else:
         #job_manager = IBMQJobManager()
         # trans_circs = qk.transpile(list(circuit_dict.values()), backend=backend, optimization_level=0)
@@ -304,18 +305,33 @@ def cost_sig_noise_qasm(pop, SIGNAL_CLASS, NOISE_CLASS, backend, time_scale=1, s
     if num_noise_trajs == 0:
         for elem in range(len(pop)):
             circ = circuit_dict['no-sig%d' % elem]
-            counts = results.get_counts(circ)
-            zero_counts = counts.get('0',0)
-            no_sig_prob.append(zero_counts/shots)
+            if backend.name() == 'unitary_simulator':
+                unitary = np.asarray(results.get_unitary(circ))
+                prob_0 = abs(unitary @ np.array([1, 0])[0])**2
+                no_sig_prob.append(prob_0) 
+
+            else:
+                counts = results.get_counts(circ)
+                zero_counts = counts.get('0',0)
+                no_sig_prob.append(zero_counts/shots)
     else:
         for elem in range(len(pop)):
             traj_sum = 0
             for traj_idx in range(num_noise_trajs):
                 circ = circuit_dict['no-sig%d_traj%d' % (elem, traj_idx)]
-                counts = results.get_counts(circ)
-                zero_counts = counts.get('0',0)
-                traj_sum += zero_counts
-            no_sig_prob.append(traj_sum/shots/num_sig_trajs)
+                if backend.name() == 'unitary_simulator':
+                        unitary = np.asarray(results.get_unitary(circ))
+                        prob_0 = abs((unitary @ np.array([1, 0]))[0])**2
+                        traj_sum += prob_0
+                else:                    
+                    counts = results.get_counts(circ)
+                    zero_counts = counts.get('0',0)
+                    traj_sum += zero_counts
+            # Find average cost
+            if backend.name() == 'unitary_simulator':
+                no_sig_prob.append(traj_sum / num_noise_trajs)
+            else:
+                no_sig_prob.append(traj_sum/shots/num_noise_trajs)
     no_sig_prob = np.array(no_sig_prob)
 
     sig_prob = []
@@ -323,10 +339,20 @@ def cost_sig_noise_qasm(pop, SIGNAL_CLASS, NOISE_CLASS, backend, time_scale=1, s
         traj_sum = 0
         for traj_idx in range(num_sig_trajs):
             circ = circuit_dict['sig%d_traj%d' % (elem, traj_idx)]
-            counts = results.get_counts(circ)
-            zero_counts = counts.get('0',0)
-            traj_sum += zero_counts
-        sig_prob.append(traj_sum/shots/num_sig_trajs)
+            if backend.name() == 'unitary_simulator':
+                unitary = np.asarray(results.get_unitary(circ))
+                prob_0 = abs((unitary @ np.array([1, 0]))[0])**2
+                traj_sum += prob_0
+            else:
+                counts = results.get_counts(circ)
+                zero_counts = counts.get('0',0)
+                traj_sum += zero_counts
+        # Find average cost
+        # sig_prob.append(traj_sum/shots/num_sig_trajs)
+        if backend.name() == 'unitary_simulator':
+            sig_prob.append(traj_sum / num_sig_trajs)
+        else:
+            sig_prob.append(traj_sum/shots/num_sig_trajs)
     sig_prob = np.array(sig_prob)
 
     fitness = no_sig_prob - sig_prob
