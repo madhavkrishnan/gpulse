@@ -5,6 +5,8 @@ from numpy.random import binomial
 from gpulse.CPMG import CPMGCircuit
 import qiskit as qk
 from qiskit.providers.ibmq.managed import IBMQJobManager
+from gpulse.util import unpack, get_rzcount
+from gpulse.sim_tools import circuit_sim, qubit_sim
 
 
 def new_fun():
@@ -357,3 +359,89 @@ def cost_sig_noise_qasm(pop, SIGNAL_CLASS, NOISE_CLASS, backend, time_scale=1, s
 
     fitness = no_sig_prob - sig_prob
     return fitness
+
+
+
+
+def noise_average(pulse_list, noise_gen, signal_gen = None, trajs=[1]):
+    """
+    A list of pulses and noise & signal generators are taken as input. p0 is 
+    computed for all pulses in the list and over number of trajectories 
+    in trajs. Computes both noise and noise + signal cases if signal gen
+    is provided.
+    """
+
+    p0_noise_list = []
+    p0_signoise_list = []
+
+    for t in trajs:
+        rz_counts = [get_rzcount(p) for p in pulse_list]
+
+        # Generate t number of noise realisations for each pulse seq
+        # ordered as [[ p1_traj1, p1_traj2,..], [[ p2_traj1, p2_traj2,..], ...]
+        noise  =[[noise_gen.generate_noise(r) for i in range(t)] for r in rz_counts] 
+
+        p0_noise = [[qubit_sim(nr, p, return_prob=True) for nr in n] for n,p in zip(noise, pulse_list)]
+
+        p0_noise = [np.mean(p) for p in p0_noise]
+               
+        p0_noise_list.append(p0_noise)
+
+        if signal_gen is None:
+            continue
+        
+        signal = [[signal_gen.generate_noise(r) for i in range(t)] for r in rz_counts]
+
+        signoise = [[sr + nr for sr, nr in zip(s, n) ] for s,n in zip(signal, noise) ]
+        
+        p0_signoise =  [[qubit_sim(signr, p, return_prob=True) for signr in n] for n,p in zip(signoise, pulse_list)]
+        
+        p0_signoise = [np.mean(p) for p in p0_signoise]
+          
+        p0_signoise_list.append(p0_signoise)
+    
+    if len(p0_noise_list) == 1:
+        p0_noise_list = p0_noise_list[0]
+        if signal_gen is not None:
+            p0_signoise_list = p0_signoise_list[0]
+
+    if signal_gen is None:
+        return p0_noise_list
+    return p0_noise_list, p0_signoise_list    
+
+
+def cost_sig_noise_qsim(noise_gen, signal_gen, pop, shots=False, trajs=1):
+
+
+    p0_n, p0_nsig = noise_average(pop, noise_gen, signal_gen=signal_gen, trajs=[trajs]) 
+
+    fit = [n - ns for n, ns in zip(p0_n, p0_nsig)]
+
+    return fit
+
+
+    # # loop over population
+    # fit = []
+    # for pulse_seq in pop:
+        
+    #     rz_count = get_rzcount(pulse_seq)
+        
+    #     # Generate noise and signal rotations
+    #     noise = [NOISE_CLASS.generate_noise(rz_count) for i in range(trajs)]
+    #     signal = [SIGNAL_CLASS.generate_noise(rz_count) for i in range(trajs)]
+
+    #     # no-signal final state
+    #     no_sig_prob = sum([ abs(qubit_sim(n, pulse_seq)[0])**2 for n in noise]) / trajs 
+
+    #     # signal final state
+    #     sig_prob = sum([ abs(qubit_sim(np.array(n) + np.array(s), pulse_seq)[0])**2 for n,s in zip(noise, signal)]) / trajs
+
+    #     fit.append( (no_sig_prob - sig_prob)[0])
+    # return fit
+
+
+
+
+
+        
+
