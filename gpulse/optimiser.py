@@ -76,7 +76,7 @@ def create_job(inputs=None):
                     accept a pulse individual of the form [(t_1,θ_1), (t_2,θ_2)... (t_n,θ_n)].
                     By default gpulse.costfn.cost_sig_noise is used.
     cfn_args : tuple
-            Positional arguments after the pulse individual for the cost function
+            Positional arguments before the pulse individual for the cost function
     cfn_kwargs : dict
             Keyword arguments of the cost function.
     pop_init : function, opt
@@ -88,8 +88,8 @@ def create_job(inputs=None):
             Expects 'max' or 'min' deciding whether to maximise or mimise the cost
             function.
     backend_type : str, opt
-                Expects either "OVERLAP" (default) or "QASM". Allows signal averaging for
-                QASM based cost functions.
+                Expects either "OVERLAP" (default), "QASM" or "QSIM". Allows signal averaging for
+                QASM based cost functions and exact evaluation for "QSIM".
     MAX_NOISE_TRAJS : int, opt
                 Number of noise trajectories to average over. Default is 1.
     MAX_SIGNAL_TRAJS'  : 1
@@ -262,6 +262,11 @@ class Optimiser:
                 fitness = toolbox.evaluate(pop, shots=shots[0], num_sig_trajs=num_sig_trajs[0], num_noise_trajs=num_noise_trajs[0])
                 for ind, fit in zip(pop, fitness):
                     ind.fitness.values = fit,
+            elif j['backend_type'] == "QSIM":
+                fitness = toolbox.evaluate(pop)
+                for ind, fit in zip(pop, fitness):
+                    ind.fitness.values = fit,
+                    
 
             # Define a statistics class to capture population statistics
             stats = tools.Statistics(key=lambda ind: ind.fitness.values)
@@ -290,9 +295,9 @@ class Optimiser:
 
             # Run genetic aglorithm over NGEN generations
             # print output headers
-            print("Generation \t\t Best Individual" )
-            print('\t\t      τ1 τ2..τn | θ1 θ2..θn')
-            print('------'*10)
+            print("Generation \t Fitness \t\t Best Individual" )
+            print('\t\t\t\t      τ1 τ2..τn | θ1 θ2..θn')
+            print('------'*15)
             for g in range(1, j['NGEN'] ):
 
                 # Select offspring from current population
@@ -323,6 +328,8 @@ class Optimiser:
                     fitnesses = [toolbox.evaluate(ind, shots=shots[g]) for ind in offspring]
                 elif j['backend_type'] == 'QASM':
                     fitnesses = toolbox.evaluate(offspring, shots=shots[g], num_sig_trajs=num_sig_trajs[g], num_noise_trajs=num_noise_trajs[g])
+                elif j['backend_type'] == 'QSIM':
+                    fitnesses = toolbox.evaluate(offspring)
 
                 # Update fitness
                 for ind, fit in zip(offspring, fitnesses):
@@ -332,7 +339,7 @@ class Optimiser:
                     del ind.fitness.values
                     if j['backend_type'] == 'OVERLAP':
                         ind.fitness.values = fit
-                    elif j['backend_type'] == 'QASM':
+                    elif (j['backend_type'] == 'QASM') or (j['backend_type'] == 'QSIM'):
                         ind.fitness.values = fit,
 
                 # Update generation.
@@ -355,10 +362,12 @@ class Optimiser:
                     rot_str = [ '2π/' + str(best_ind[0][i][1]) for i in range(len(best_ind[0]))]
 
                     best_formated = " ".join(tau_str) + ' | ' + " ".join(rot_str)
-                    print(f'{g} \t\t {best_formated} ')
+                    best_fitness = best_ind[0].fitness.values[0]
+                    print(f'{g} \t\t {best_fitness:.4f} \t\t {best_formated} ')
                     
-                if j['cfn_kwargs']['backend'].name() != 'qasm_simulator':
-                    pk.dump([logbook, best_ind[0][:]], open('%s_ga-run_temp.p' % j['cfn_kwargs']['backend'].name(), 'wb'))
+                # Commenting this out because it looks like it would break non-qasm runs
+                # if j['cfn_kwargs']['backend'].name() != 'qasm_simulator':
+                #     pk.dump([logbook, best_ind[0][:]], open('%s_ga-run_temp.p' % j['cfn_kwargs']['backend'].name(), 'wb'))
                     
             print('\n')
             results.append([logbook, best_ind[0][:], j])
