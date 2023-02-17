@@ -370,8 +370,9 @@ class Optimiser:
                 # Commenting this out because it looks like it would break non-qasm runs
                 # if j['cfn_kwargs']['backend'].name() != 'qasm_simulator':
                 #     pk.dump([logbook, best_ind[0][:]], open('%s_ga-run_temp.p' % j['cfn_kwargs']['backend'].name(), 'wb'))
-                    
-            print('\n')
+
+            if not silent:        
+                print('\n')
             results.append([logbook, best_ind[0][:], j])
 
         self.results = copy.deepcopy(results)
