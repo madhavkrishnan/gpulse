@@ -22,3 +22,13 @@ def get_rzcount(pulse_sequence):
     taus, rots = unpack(pulse_sequence)
     
     return(4 * sum(taus))
+
+def pk_init():
+    """
+    Helper function to initilise classes so pickle can retrive saved data.
+    """
+
+    from deap import creator, base
+    
+    creator.create("Fitness", base.Fitness, weights=(1.0,))
+    creator.create("Individual", list, fitness=creator.Fitness)
