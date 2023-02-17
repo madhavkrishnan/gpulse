@@ -151,7 +151,7 @@ class Optimiser:
         self.jobs = jobs
         self.results = None
 
-    def run(self):
+    def run(self, silent=False):
         """
         Executes the optimiser for the job instances in self.jobs.
 
@@ -166,8 +166,9 @@ class Optimiser:
         count = 1
         for j in self.jobs:
 
-            print('Job ' + str(count))
-            print('------')
+            if not silent:
+                print('Job ' + str(count))
+                print('------')
             count += 1
             # Set up deap functions
 
@@ -295,9 +296,10 @@ class Optimiser:
 
             # Run genetic aglorithm over NGEN generations
             # print output headers
-            print("Generation \t Fitness \t\t Best Individual" )
-            print('\t\t\t\t      τ1 τ2..τn | θ1 θ2..θn')
-            print('------'*15)
+            if not silent:
+                print("Generation \t Fitness \t\t Best Individual" )
+                print('\t\t\t\t      τ1 τ2..τn | θ1 θ2..θn')
+                print('------'*15)
             for g in range(1, j['NGEN'] ):
 
                 # Select offspring from current population
@@ -354,17 +356,17 @@ class Optimiser:
                 logbook.record(gen=g, **record )
 
 
-
+                if not silent:
                 # print output every NGEN / 10 generations.
-                if (g % (j['NGEN']/10) == 0) or (g == j['NGEN']-1):
-                    fid = [ind.fitness.values[0] for ind in pop]
-                    tau_str = [str(best_ind[0][i][0]) for i in range(len(best_ind[0]))]
-                    rot_str = [ '2π/' + str(best_ind[0][i][1]) for i in range(len(best_ind[0]))]
+                    if (g % (j['NGEN']/10) == 0) or (g == j['NGEN']-1):
+                        fid = [ind.fitness.values[0] for ind in pop]
+                        tau_str = [str(best_ind[0][i][0]) for i in range(len(best_ind[0]))]
+                        rot_str = [ '2π/' + str(best_ind[0][i][1]) for i in range(len(best_ind[0]))]
 
-                    best_formated = " ".join(tau_str) + ' | ' + " ".join(rot_str)
-                    best_fitness = best_ind[0].fitness.values[0]
-                    print(f'{g} \t\t {best_fitness:.4f} \t\t {best_formated} ')
-                    
+                        best_formated = " ".join(tau_str) + ' | ' + " ".join(rot_str)
+                        best_fitness = best_ind[0].fitness.values[0]
+                        print(f'{g} \t\t {best_fitness:.4f} \t\t {best_formated} ')
+                        
                 # Commenting this out because it looks like it would break non-qasm runs
                 # if j['cfn_kwargs']['backend'].name() != 'qasm_simulator':
                 #     pk.dump([logbook, best_ind[0][:]], open('%s_ga-run_temp.p' % j['cfn_kwargs']['backend'].name(), 'wb'))
