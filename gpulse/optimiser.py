@@ -284,7 +284,7 @@ class Optimiser:
 
             # Get the stats of the current population
             record = stats.compile(pop)
-            record['best'] = best_ind[0]
+            record['best'] = best_ind[0][:]
 
             # Create a log object
             logbook = tools.Logbook()
@@ -352,7 +352,7 @@ class Optimiser:
 
                 # Record fitness statistics for new generation.
                 record = stats.compile(pop)
-                record['best'] = best_ind[0]
+                record['best'] = best_ind[0][:]
                 logbook.record(gen=g, **record )
 
 
