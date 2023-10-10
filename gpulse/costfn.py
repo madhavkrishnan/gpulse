@@ -4,7 +4,10 @@ import numpy as np
 from numpy.random import binomial
 from gpulse.CPMG import CPMGCircuit
 import qiskit as qk
-from qiskit.providers.ibmq.managed import IBMQJobManager
+
+# This no longer works with the latest version of qiskit  
+# from qiskit.providers.ibmq.managed import IBMQJobManager
+
 from gpulse.util import unpack, get_rzcount
 from gpulse.sim_tools import circuit_sim, qubit_sim
 
