@@ -6,6 +6,7 @@ from deap import base, tools, creator
 from gpulse.deap_tools import mutate, init_ind, cx, snip
 import copy
 import pickle as pk
+from gpulse.util import unpack
 
 def create_job(inputs=None):
     """
@@ -120,7 +121,8 @@ def create_job(inputs=None):
               'optimise'          : 'max',
               'backend_type'      : 'OVERLAP',
               'MAX_NOISE_TRAJS'   : 1,
-              'MAX_SIGNAL_TRAJS'  : 1
+              'MAX_SIGNAL_TRAJS'  : 1,
+              'MAX_TIME'          : None
               }
     # Add user defined values
     if not inputs is None:
@@ -205,10 +207,11 @@ class Optimiser:
                             mutate,
                             tau_lims = [j['TAU_MIN'], j['TAU_MAX']],
                             rot_lims = [j['X_ROT_MIN'], j['X_ROT_MAX']],
-                            indpb=0.5, vary_length = not j['fixed_cycles'], GPB=j['GPB'])
+                            indpb=0.5, vary_length = not j['fixed_cycles'], GPB=j['GPB'],
+                            max_time = j['MAX_TIME'])
 
             # Register a crossover function
-            toolbox.register("mate", cx)
+            toolbox.register("mate", cx, max_time = j['MAX_TIME'])
 
             # If a population initialisation function has been passed to the
             # optimiser, it will use it instead of the default one deap_tools.init_ind
