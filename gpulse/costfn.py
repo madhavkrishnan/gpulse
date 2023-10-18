@@ -1,10 +1,11 @@
 # This file contains different cost functions for the GA optimiser
-from gpulse.ffn import decay_probability, chi
+from gpulse.ffn import decay_probability, chi, filter_function
 import numpy as np
 from numpy.random import binomial
 from gpulse.CPMG import CPMGCircuit
 import qiskit as qk
 from qiskit.providers.ibmq.managed import IBMQJobManager
+from scipy.stats import binom
 
 
 def new_fun():
@@ -368,7 +369,7 @@ def cost_sig_noise_coherent_error(pulse, SIGNAL_PSD, NOISE_PSD, time_scale=1, sh
 
 
 def cost_sig_noise_sampling_coherent_error(pulse, SIGNAL_PSD, NOISE_PSD, time_scale=1, shots=100, ansatz="CPMG",
-                                 sigma=0, num_trajs=1, error=0):
+                                 sigma=0, num_trajs=1, error=0, order=1):
     """
     Computes the difference in decay probability between noise and noise + singal
     of a CPMG sequence individual based on the filter function. I.e returns
@@ -425,15 +426,59 @@ def cost_sig_noise_sampling_coherent_error(pulse, SIGNAL_PSD, NOISE_PSD, time_sc
     p_sig_perf = 0.5*(1 + np.exp(-chi_noise - chi_sig))
     p_noise_perf = 0.5*(1 + np.exp(-chi_noise))
     
-    p_sig = 0
-    p_noise = 0
-    for _ in range(num_trajs):
-        p_sig += np.max([0,np.min([p_sig_perf + np.random.normal(0, np.sqrt(sigma)),1])])
-        p_noise += np.max([0,np.min([p_noise_perf + np.random.normal(0, np.sqrt(sigma)),1])])
-    p_sig = p_sig/num_trajs
-    p_noise = p_noise/num_trajs
+    # x = list(range(1,shots))
+    # Bn = np.array([binom.pmf(i, shots, p_noise_perf) for i in x])
+    # Bsn = np.array([binom.pmf(i, shots, p_sig_perf) for i in x])
+    # Nth = find_N_threshold(Bn, Bsn)
+    # error = np.sum(Bn[:Nth]) + np.sum(Bsn[Nth:])
+    
+    Nth = calc_N_threshold(p_noise_perf, p_sig_perf, shots)
+    error = binom.cdf(Nth, shots, p_noise_perf) + (1 - binom.cdf(Nth, shots, p_sig_perf))
+    return -error, 
+    
+#     p_sig = 0
+#     p_noise = 0
+#     for _ in range(num_trajs):
+#         p_sig += np.max([0,np.min([p_sig_perf + np.random.normal(0, np.sqrt(sigma)),1])])
+#         p_noise += np.max([0,np.min([p_noise_perf + np.random.normal(0, np.sqrt(sigma)),1])])
+#     p_sig = p_sig/num_trajs
+#     p_noise = p_noise/num_trajs
 
-    return (p_noise - p_sig),
+#     return (p_noise - p_sig),
+    # p_sig_list = np.random.binomial(1, p_sig_perf, num_trajs)
+    # p_noise_list = np.random.binomial(1, p_noise_perf, num_trajs)
+    # dp = wasserstein_dist(np.sort(p_sig_list), np.sort(p_noise_list), p=order)
+    # return dp,
+    
+
+
+def find_N_threshold(Bn, Bsn):
+    # Bn (array) : binomial distribution for noise only
+    # Bsn (array): binomial distribution for signal+noise
+    Bn_max_idx = list(Bn).index(np.max(Bn))
+    Bsn_max_idx = list(Bsn).index(np.max(Bsn))
+    # print(Bn_max_idx, Bsn_max_idx)
+    delta_B = np.abs(Bsn - Bn)
+    if Bn_max_idx > Bsn_max_idx:
+        B_thresh = np.min(delta_B[Bsn_max_idx:Bn_max_idx])
+        N_thresh = list(delta_B).index(B_thresh)
+    else:
+        N_thresh = 0
+    return N_thresh
+
+def calc_N_threshold(p_n, p_sn, shots):
+    if p_n > p_sn:
+        Nth = int(np.round(shots*np.log10((1-p_sn)/(1-p_n))/np.log10((p_n*(1-p_sn))/((1-p_n)*p_sn)))) - 1
+    else:
+        Nth = 0
+    return Nth
+
+def wasserstein_dist(set1, set2, p=1):
+    w12 = 0
+    for i in range(len(set1)):
+        w12 += np.abs(set1[i] - set2[i])**p
+    return (1/len(set1)*w12)**(1/p)
+
 
 
 
@@ -524,3 +569,63 @@ def cost_sig_noise_qasm(pop, SIGNAL_CLASS, NOISE_CLASS, backend, flip_angle, tim
     
     fitness = no_sig_prob - sig_prob
     return fitness
+
+
+
+
+def cost_superres(pulse, wc, filter_null_band, time_scale=1, shots=100, ansatz="CPMG"):
+    """
+    Computes the difference in decay probability between noise and noise + singal
+    of a CPMG sequence individual based on the filter function. I.e returns
+    0.5 * e^{-X_noise}(1 - e^{-X_sig})
+
+    Parameters
+    ----------
+    pulse : list
+        sequence of pulse rotations and interpulse timing - [[t_1,a] , [t_2, b], [t_3,c]].
+        Rotation angles will be [pi/a, pi/b, pi/c]
+
+
+    time_scale : float, optional
+        time corresponding to one step. Defaults to 1.
+
+    SIGNAL_PSD : list
+        power spectral density of the signal
+
+    NOISE_PSD : list
+        power spectral density of the Noise
+
+    taus : list, opt
+    a list of tau spacings for eg [2, 3] corresponds to the sequence:
+
+    ansatz : str, opt
+        Expects either "CPMG" which is default or None. If CPMG for eg. tau
+        spacings  [2, 3] corresponds to the sequence:
+        I-I-Rx-I-I-I-I-Rx-I-I + I-I-I-Rx-I-I-I-I-I-I-Rx-I-I-I
+        For anything else,
+        I-I-Rx-I-I-I-Rx
+
+    Returns
+    -------
+    tuple :
+        outcome from binomial distrubution with parameter p computed from
+        the filter function of the CPMG sequence.
+    """
+    unzipped_object = zip(*pulse)
+    unzipped_list = list(unzipped_object)
+
+    taus, pulse_rot  = unzipped_list
+
+    if len(taus) != len(pulse_rot):
+        raise ValueError("Length of taus must equal length of rots")
+    
+    w, FF = filter_function(pulse_rot, time_scale=time_scale, num_points=4112,  taus=taus, ansatz=ansatz)
+
+    grad2FF = np.gradient(np.gradient(FF))
+    # chi_sig = chi(pulse_rot, SIGNAL_PSD, time_scale=time_scale, taus=taus, ansatz=ansatz)
+#     chi_noise = chi(pulse_rot, NOISE_PSD, time_scale=time_scale, taus=taus, ansatz=ansatz)
+    # np.trapz(FF * PSD / time_scale, w) / (2 * np.pi )
+    if len(filter_null_band) == 0:
+        return -np.sum(FF[wc])/np.sum(FF) + np.sum(grad2FF[wc]),
+    else:
+        return -np.sum(FF[wc]) + np.sum(grad2FF[wc]) - np.sum(FF[filter_null_band]),

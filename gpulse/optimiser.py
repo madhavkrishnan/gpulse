@@ -315,6 +315,7 @@ class Optimiser:
                 print("Generation \t\t Best Individual" )
                 print('\t\t      τ1 τ2..τn | θ1 θ2..θn')
                 print('------'*10)
+                # print(pop)
             for g in range(1, j['NGEN'] ):
 
                 # Select offspring from current population
