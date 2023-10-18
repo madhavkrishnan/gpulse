@@ -3,7 +3,7 @@ import numpy as np
 import random
 from gpulse.costfn import cost_sig_noise
 from deap import base, tools, creator
-from gpulse.deap_tools import mutate, init_ind, cx, snip
+from gpulse.deap_tools import mutate, init_ind, cx, snip, mutate_maxt
 import copy
 import pickle as pk
 from gpulse.util import unpack
@@ -203,12 +203,21 @@ class Optimiser:
 
             # Register the mutation function
 
-            toolbox.register("mutate",
-                            mutate,
-                            tau_lims = [j['TAU_MIN'], j['TAU_MAX']],
-                            rot_lims = [j['X_ROT_MIN'], j['X_ROT_MAX']],
-                            indpb=0.5, vary_length = not j['fixed_cycles'], GPB=j['GPB'],
-                            max_time = j['MAX_TIME'])
+            if j["MAX_TIME"] is None:
+                toolbox.register("mutate",
+                                mutate,
+                                tau_lims = [j['TAU_MIN'], j['TAU_MAX']],
+                                rot_lims = [j['X_ROT_MIN'], j['X_ROT_MAX']],
+                                indpb=0.5, vary_length = not j['fixed_cycles'], GPB=j['GPB'],
+                                max_time = j['MAX_TIME'])
+            else:
+                print("Registering constrained mutation")
+                toolbox.register("mutate",
+                                mutate_maxt,
+                                tau_lims = [j['TAU_MIN'], j['TAU_MAX']],
+                                rot_lims = [j['X_ROT_MIN'], j['X_ROT_MAX']],
+                                indpb=0.5, vary_length = not j['fixed_cycles'], GPB=j['GPB'],
+                                max_time = j['MAX_TIME'])
 
             # Register a crossover function
             toolbox.register("mate", cx, max_time = j['MAX_TIME'])
@@ -256,6 +265,8 @@ class Optimiser:
             # If variable cycles, randomise population cycle length
             if not j['fixed_cycles']:
                 pop = list(toolbox.map(snip, pop))
+
+            #TODO : fix total time 
 
             # Evaluate the fitness of the population.
             if j['backend_type'] == 'OVERLAP':
